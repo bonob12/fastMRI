@@ -5,6 +5,7 @@ import torch.nn as nn
 import time
 from pathlib import Path
 import copy
+import wandb
 
 from collections import defaultdict
 from utils.data.load_data import create_data_loaders
@@ -41,6 +42,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
                 f'Loss = {loss.item():.4g} '
                 f'Time = {time.perf_counter() - start_iter:.4f}s',
             )
+            wandb.log({"loss": loss.item()})
             start_iter = time.perf_counter()
     total_loss = total_loss / len_loader
     return total_loss, time.perf_counter() - start_epoch
@@ -91,11 +93,21 @@ def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_bes
     if is_new_best:
         shutil.copyfile(exp_dir / 'model.pt', exp_dir / 'best_model.pt')
 
+        artifact = wandb.Artifact(name="best_model", type="model")
+        artifact.add_file(str(exp_dir / 'best_model.pt'))
+        logged_artifact = wandb.log_artifact(artifact)
+        logged_artifact.wait()
         
 def train(args):
     device = torch.device(f'cuda:{args.GPU_NUM}' if torch.cuda.is_available() else 'cpu')
     torch.cuda.set_device(device)
     print('Current cuda device: ', torch.cuda.current_device())
+
+    wandb.init(project="test_varnet",
+                name="expermiment_1",
+                dir="../result/test_Varnet",
+                config=vars(args),
+                )
 
     model = VarNet(num_cascades=args.cascade, 
                    chans=args.chans, 
@@ -118,7 +130,7 @@ def train(args):
         
         train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type)
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
-        
+       
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
         file_path = os.path.join(args.val_loss_dir, "val_loss_log")
         np.save(file_path, val_loss_log)
@@ -133,6 +145,12 @@ def train(args):
         is_new_best = val_loss < best_val_loss
         best_val_loss = min(best_val_loss, val_loss)
 
+        wandb.log({
+            "epoch": epoch,
+            "train_loss": train_loss.item(),
+            "val_loss": val_loss.item()
+        })
+
         save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best)
         print(
             f'Epoch = [{epoch:4d}/{args.num_epochs:4d}] TrainLoss = {train_loss:.4g} '
@@ -146,3 +164,5 @@ def train(args):
             print(
                 f'ForwardTime = {time.perf_counter() - start:.4f}s',
             )
+
+    wandb.finish()

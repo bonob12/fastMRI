@@ -12,7 +12,7 @@ def parse():
     parser = argparse.ArgumentParser(description='Test Varnet on FastMRI challenge Images',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-g', '--GPU_NUM', type=int, default=0, help='GPU number to allocate')
-    parser.add_argument('-b', '--batch-size', type=int, default=1, help='Batch size')
+    parser.add_argument('-b', '--batch_size', type=int, default=1, help='Batch size')
     parser.add_argument('-n', '--net_name', type=Path, default='test_varnet', help='Name of network')
     parser.add_argument('-p', '--path_data', type=Path, default='/Data/leaderboard/', help='Directory of test data')
     
