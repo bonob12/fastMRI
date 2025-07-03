@@ -1,0 +1,45 @@
+method: bayes
+metric:
+  name: val_loss
+  goal: minimize
+program: train.py
+
+parameters:
+  GPU_NUM:
+    value: 0
+  batch_size:
+    value: 1
+  num_epochs:
+    value: 5
+  lr:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.01
+  report_interval:
+    value: 10
+  net_name:
+    value: "test_varnet"
+  data_path_train:
+    value: "../Data/train/"
+  data_path_val:
+    value: "../Data/val/"
+  cascade:
+    distribution: int_uniform
+    min: 1
+    max: 4
+  chans:
+    value: 9
+  sens_chans:
+    value: 4
+  pools:
+    value: 4
+  sens_pools:
+    value: 4
+  input_key:
+    value: "kspace"
+  target_key:
+    value: "image_label"
+  max_key:
+    value: "max"
+  seed:
+    value: 430

@@ -2,6 +2,7 @@ import torch
 import argparse
 import shutil
 import os, sys
+import wandb
 from pathlib import Path
 
 if os.getcwd() + '/utils/model/' not in sys.path:
@@ -16,6 +17,8 @@ from utils.common.utils import seed_fix
 def parse():
     parser = argparse.ArgumentParser(description='Train Varnet on FastMRI challenge Images',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--not_sweep', action='store_true', help='This is not wandb sweep call')
+
     parser.add_argument('-g', '--GPU_NUM', type=int, default=0, help='GPU number to allocate')
     parser.add_argument('-b', '--batch_size', type=int, default=1, help='Batch size')
     parser.add_argument('-e', '--num_epochs', type=int, default=5, help='Number of epochs')
@@ -40,7 +43,25 @@ def parse():
 
 if __name__ == '__main__':
     args = parse()
-    
+
+    if args.not_sweep:
+        wandb.init(
+            project="test_varnet",    
+            name="expermiment_1",
+            dir="../result/test_Varnet",
+            config=vars(args),
+        )
+    else:
+        wandb.init(
+            dir="../result/test_Varnet",
+        )
+        config = wandb.config
+        args = argparse.Namespace(**config)
+        args.net_name = Path(args.net_name)
+        args.data_path_train = Path(args.data_path_train)
+        args.data_path_val= Path(args.data_path_val)
+
+
     # fix seed
     if args.seed is not None:
         seed_fix(args.seed)

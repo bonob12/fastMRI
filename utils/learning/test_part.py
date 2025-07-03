@@ -32,9 +32,13 @@ def forward(args):
     torch.cuda.set_device(device)
     print ('Current cuda device ', torch.cuda.current_device())
 
-    model = VarNet(num_cascades=args.cascade, 
-                   chans=args.chans, 
-                   sens_chans=args.sens_chans)
+    model = VarNet(
+        num_cascades=args.cascade, 
+        chans=args.chans, 
+        pools=args.pools,
+        sens_chans=args.sens_chans,
+        sens_pools=args.sens_pools,
+    )
     model.to(device=device)
     
     checkpoint = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)

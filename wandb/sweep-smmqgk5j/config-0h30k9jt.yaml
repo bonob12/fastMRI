@@ -1,0 +1,36 @@
+wandb_version: 1
+
+GPU_NUM:
+  value: 0
+batch_size:
+  value: 1
+cascade:
+  value: 2
+chans:
+  value: 9
+data_path_train:
+  value: ../Data/train/
+data_path_val:
+  value: ../Data/val/
+input_key:
+  value: kspace
+lr:
+  value: 0.0001950512886313505
+max_key:
+  value: max
+net_name:
+  value: test_varnet
+num_epochs:
+  value: 5
+pools:
+  value: 4
+report_interval:
+  value: 10
+seed:
+  value: 430
+sens_chans:
+  value: 4
+sens_pools:
+  value: 4
+target_key:
+  value: image_label

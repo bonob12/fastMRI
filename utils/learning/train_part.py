@@ -103,13 +103,6 @@ def train(args):
     torch.cuda.set_device(device)
     print('Current cuda device: ', torch.cuda.current_device())
 
-    wandb.init(
-        project="test_varnet",    
-        name="expermiment_1",
-        dir="../result/test_Varnet",
-        config=vars(args),
-    )
-
     model = VarNet(
         num_cascades=args.cascade, 
         chans=args.chans, 

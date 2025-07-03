@@ -19,6 +19,8 @@ def parse():
     parser.add_argument('--cascade', type=int, default=1, help='Number of cascades | Should be less than 12')
     parser.add_argument('--chans', type=int, default=9, help='Number of channels for cascade U-Net')
     parser.add_argument('--sens_chans', type=int, default=4, help='Number of channels for sensitivity map U-Net')
+    parser.add_argument('--pools', type=int, default=4)
+    parser.add_argument('--sens_pools', type=int, default=4)
     parser.add_argument("--input_key", type=str, default='kspace', help='Name of input key')
 
     args = parser.parse_args()
