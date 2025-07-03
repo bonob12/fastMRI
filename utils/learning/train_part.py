@@ -103,15 +103,20 @@ def train(args):
     torch.cuda.set_device(device)
     print('Current cuda device: ', torch.cuda.current_device())
 
-    wandb.init(project="test_varnet",
-                name="expermiment_1",
-                dir="../result/test_Varnet",
-                config=vars(args),
-                )
+    wandb.init(
+        project="test_varnet",    
+        name="expermiment_1",
+        dir="../result/test_Varnet",
+        config=vars(args),
+    )
 
-    model = VarNet(num_cascades=args.cascade, 
-                   chans=args.chans, 
-                   sens_chans=args.sens_chans)
+    model = VarNet(
+        num_cascades=args.cascade, 
+        chans=args.chans, 
+        pools=args.pools,
+        sens_chans=args.sens_chans,
+        sens_pools=args.sens_pools,
+    )
     model.to(device=device)
 
     loss_type = SSIMLoss().to(device=device)

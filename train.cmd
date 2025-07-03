@@ -1,0 +1,16 @@
+python train.py ^
+  --GPU_NUM 0 ^
+  --batch_size 1 ^
+  --num_epochs 5 ^
+  --lr 0.001 ^
+  --report_interval 10 ^
+  --net_name test_varnet ^
+  --data_path_train ../Data/train/ ^
+  --data_path_val ../Data/val/ ^
+  --cascade 1 ^
+  --chans 9 ^
+  --sens_chans 4 ^
+  --input_key kspace ^
+  --target_key image_label ^
+  --max_key max ^
+  --seed 430
