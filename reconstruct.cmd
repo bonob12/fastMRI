@@ -1,11 +1,3 @@
 python reconstruct.py ^
---GPU_NUM 0 ^
---batch_size 1 ^
 --net_name test_Varnet ^
---path_data../Data/leaderboard ^
---cascade 1 ^
---chans 9 ^
---pools 4 ^
---sens_chans 4 ^
---sens_pools 4 ^
---input_key kspace
+--path_data ../Data/leaderboard

@@ -6,7 +6,7 @@ from utils.common.utils import save_reconstructions
 from utils.data.load_data import create_data_loaders
 from utils.model.varnet import VarNet
 
-def test(args, model, data_loader):
+def test(model, data_loader):
     model.eval()
     reconstructions = defaultdict(dict)
     
@@ -32,19 +32,21 @@ def forward(args):
     torch.cuda.set_device(device)
     print ('Current cuda device ', torch.cuda.current_device())
 
+    checkpoint = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
+    saved_args = checkpoint['args']
+
     model = VarNet(
-        num_cascades=args.cascade, 
-        chans=args.chans, 
-        pools=args.pools,
-        sens_chans=args.sens_chans,
-        sens_pools=args.sens_pools,
+        num_cascades=saved_args.cascade, 
+        chans=saved_args.chans, 
+        pools=saved_args.pools,
+        sens_chans=saved_args.sens_chans,
+        sens_pools=saved_args.sens_pools,
     )
     model.to(device=device)
     
-    checkpoint = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
     print(checkpoint['epoch'], checkpoint['best_val_loss'].item())
     model.load_state_dict(checkpoint['model'])
     
-    forward_loader = create_data_loaders(data_path = args.data_path, args = args, isforward = True)
-    reconstructions, inputs = test(args, model, forward_loader)
+    forward_loader = create_data_loaders(data_path = args.data_path, args = saved_args, isforward = True)
+    reconstructions, inputs = test(model, forward_loader)
     save_reconstructions(reconstructions, args.forward_dir, inputs=inputs)
