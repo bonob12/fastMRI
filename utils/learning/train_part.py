@@ -116,8 +116,6 @@ def train(args):
     )
     model.to(device=device)
 
-    model = torch.compile(model)
-
     dummy_loader = create_data_loaders(data_path = args.data_path_train, args = args)
     sample = next(iter(dummy_loader))
     kspace = sample[1]  # index 1이 kspace
@@ -161,7 +159,7 @@ def train(args):
         })
 
         save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best)
-        print(f"{'TrainLoss':<10}: {train_loss:.4g}   {'ValLoss':<10}: {val_loss:.4g}")
+        print(f"{'TrainLoss':<10}: {train_loss:.4g}     {'ValLoss':<10}: {val_loss:.4g}")
         print(f"{'TrainTime':<10}: {train_time:.2f}s   {'ValTime':<10}: {val_time:.2f}s")
 
         if is_new_best:
