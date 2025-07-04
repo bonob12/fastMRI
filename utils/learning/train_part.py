@@ -7,6 +7,8 @@ from pathlib import Path
 import copy
 import wandb
 
+from torchinfo import summary
+from tqdm import tqdm
 from collections import defaultdict
 from utils.data.load_data import create_data_loaders
 from utils.common.utils import save_reconstructions, ssim_loss
@@ -21,29 +23,27 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
     len_loader = len(data_loader)
     total_loss = 0.
 
-    for iter, data in enumerate(data_loader):
-        mask, kspace, target, maximum, _, _ = data
-        mask = mask.cuda(non_blocking=True)
-        kspace = kspace.cuda(non_blocking=True)
-        target = target.cuda(non_blocking=True)
-        maximum = maximum.cuda(non_blocking=True)
+    with tqdm(total=len_loader, desc=f"{'Train':<6}") as pbar:
+        for iter, data in enumerate(data_loader):
+            mask, kspace, target, maximum, _, _ = data
+            mask = mask.cuda(non_blocking=True)
+            kspace = kspace.cuda(non_blocking=True)
+            target = target.cuda(non_blocking=True)
+            maximum = maximum.cuda(non_blocking=True)
 
-        output = model(kspace, mask)
-        loss = loss_type(output, target, maximum)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
+            output = model(kspace, mask)
+            loss = loss_type(output, target, maximum)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
 
-        if iter % args.report_interval == 0:
-            print(
-                f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
-                f'Iter = [{iter:4d}/{len(data_loader):4d}] '
-                f'Loss = {loss.item():.4g} '
-                f'Time = {time.perf_counter() - start_iter:.4f}s',
-            )
-            wandb.log({"loss": loss.item()})
-            start_iter = time.perf_counter()
+            pbar.update(1)
+            pbar.set_postfix(loss=f"{loss.item():.4g}")
+
+            if iter % args.report_interval == 0:
+                wandb.log({"loss": loss.item()})
+
     total_loss = total_loss / len_loader
     return total_loss, time.perf_counter() - start_epoch
 
@@ -53,17 +53,21 @@ def validate(args, model, data_loader):
     reconstructions = defaultdict(dict)
     targets = defaultdict(dict)
     start = time.perf_counter()
+    len_loader = len(data_loader)
 
     with torch.no_grad():
-        for iter, data in enumerate(data_loader):
-            mask, kspace, target, _, fnames, slices = data
-            kspace = kspace.cuda(non_blocking=True)
-            mask = mask.cuda(non_blocking=True)
-            output = model(kspace, mask)
+        with tqdm(total=len_loader, desc=f"{'Val':<6}") as pbar:
+            for iter, data in enumerate(data_loader):
+                mask, kspace, target, _, fnames, slices = data
+                kspace = kspace.cuda(non_blocking=True)
+                mask = mask.cuda(non_blocking=True)
+                output = model(kspace, mask)
 
-            for i in range(output.shape[0]):
-                reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
-                targets[fnames[i]][int(slices[i])] = target[i].numpy()
+                for i in range(output.shape[0]):
+                    reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
+                    targets[fnames[i]][int(slices[i])] = target[i].numpy()
+                
+                pbar.update(1)
 
     for fname in reconstructions:
         reconstructions[fname] = np.stack(
@@ -93,10 +97,10 @@ def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_bes
     if is_new_best:
         shutil.copyfile(exp_dir / 'model.pt', exp_dir / 'best_model.pt')
 
-        artifact = wandb.Artifact(name="best_model", type="model")
-        artifact.add_file(str(exp_dir / 'best_model.pt'))
-        logged_artifact = wandb.log_artifact(artifact)
-        logged_artifact.wait()
+        # artifact = wandb.Artifact(name="best_model", type="model")
+        # artifact.add_file(str(exp_dir / 'best_model.pt'))
+        # logged_artifact = wandb.log_artifact(artifact)
+        # logged_artifact.wait()
         
 def train(args):
     device = torch.device(f'cuda:{args.GPU_NUM}' if torch.cuda.is_available() else 'cpu')
@@ -112,6 +116,12 @@ def train(args):
     )
     model.to(device=device)
 
+    dummy_loader = create_data_loaders(data_path = args.data_path_train, args = args)
+    sample = next(iter(dummy_loader))
+    kspace = sample[1]  # index 1이 kspace
+    mask = sample[0]
+    summary(model, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
+
     loss_type = SSIMLoss().to(device=device)
     optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
@@ -124,7 +134,7 @@ def train(args):
     
     val_loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):
-        print(f'Epoch #{epoch:2d} ............... {args.net_name} ...............')
+        print(f'Epoch [{epoch:2d}/{args.num_epochs:2d}] ............... {args.net_name} ...............')
         
         train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type)
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
@@ -132,7 +142,6 @@ def train(args):
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
         file_path = os.path.join(args.val_loss_dir, "val_loss_log")
         np.save(file_path, val_loss_log)
-        print(f"loss file saved! {file_path}")
 
         train_loss = torch.tensor(train_loss).cuda(non_blocking=True)
         val_loss = torch.tensor(val_loss).cuda(non_blocking=True)
@@ -150,10 +159,8 @@ def train(args):
         })
 
         save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best)
-        print(
-            f'Epoch = [{epoch:4d}/{args.num_epochs:4d}] TrainLoss = {train_loss:.4g} '
-            f'ValLoss = {val_loss:.4g} TrainTime = {train_time:.4f}s ValTime = {val_time:.4f}s',
-        )
+        print(f"{'TrainLoss':<10}: {train_loss:.4g}   {'ValLoss':<10}: {val_loss:.4g}")
+        print(f"{'TrainTime':<10}: {train_time:.2f}s   {'ValTime':<10}: {val_time:.2f}s")
 
         if is_new_best:
             print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@")

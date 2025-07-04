@@ -3,6 +3,7 @@ metric:
   name: val_loss
   goal: minimize
 program: train.py
+project: test_varnet_sweep
 
 parameters:
   GPU_NUM:

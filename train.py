@@ -1,6 +1,7 @@
 import torch
 import argparse
 import shutil
+import datetime
 import os, sys
 import wandb
 from pathlib import Path
@@ -47,7 +48,6 @@ if __name__ == '__main__':
     if args.not_sweep:
         wandb.init(
             project="test_varnet",    
-            name="expermiment_1",
             dir="../result/test_Varnet",
             config=vars(args),
         )
@@ -66,12 +66,17 @@ if __name__ == '__main__':
     if args.seed is not None:
         seed_fix(args.seed)
 
-    args.exp_dir = '../result' / args.net_name / 'checkpoints'
-    args.val_dir = '../result' / args.net_name / 'reconstructions_val'
-    args.main_dir = '../result' / args.net_name / __file__
-    args.val_loss_dir = '../result' / args.net_name
+    run_id = wandb.run.id
+    timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
+    run_name = f"{timestamp}-{run_id}"
+    wandb.run.name = run_name
+
+    args.exp_dir = Path('../result') / args.net_name / 'checkpoints' / run_name
+    args.val_dir = Path('../result') / args.net_name / 'reconstructions_val' / run_name
+    args.val_loss_dir = Path('../result') / args.net_name / 'val_loss_log' / run_name
 
     args.exp_dir.mkdir(parents=True, exist_ok=True)
     args.val_dir.mkdir(parents=True, exist_ok=True)
+    args.val_loss_dir.mkdir(parents=True, exist_ok=True)
 
     train(args)
