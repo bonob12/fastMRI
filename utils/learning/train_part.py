@@ -39,9 +39,9 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
             total_loss += loss.item()
 
             pbar.update(1)
-            pbar.set_postfix(loss=f"{loss.item():.4g}")
 
             if iter % args.report_interval == 0:
+                pbar.set_postfix(loss=f"{loss.item():.4g}")
                 wandb.log({"loss": loss.item()})
 
     total_loss = total_loss / len_loader
@@ -115,6 +115,8 @@ def train(args):
         sens_pools=args.sens_pools,
     )
     model.to(device=device)
+
+    model = torch.compile(model)
 
     dummy_loader = create_data_loaders(data_path = args.data_path_train, args = args)
     sample = next(iter(dummy_loader))
