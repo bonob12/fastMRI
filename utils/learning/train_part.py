@@ -1,6 +1,7 @@
 import logging
 logging.disable(logging.WARNING)
 
+import os
 import shutil
 import numpy as np
 import torch
@@ -12,12 +13,6 @@ import copy
 import deepspeed
 import wandb
 
-logging.getLogger("deepspeed").setLevel(logging.WARNING)
-logging.getLogger("deepspeed.runtime.engine").setLevel(logging.WARNING)
-logging.getLogger("deepspeed.runtime.activation_checkpointing.checkpointing").setLevel(logging.WARNING)
-logging.getLogger("deepspeed.runtime.zero.stage_1").setLevel(logging.WARNING)
-logging.getLogger("deepspeed.accelerator.real_accelerator").setLevel(logging.WARNING)
-
 from torchinfo import summary
 from tqdm import tqdm
 from collections import defaultdict
@@ -26,7 +21,6 @@ from utils.common.utils import save_reconstructions, ssim_loss
 from utils.common.loss_function import SSIMLoss
 from utils.model.varnet import VarNet
 
-import os
 
 def train_epoch(model, current_epoch_step, data_loader, lr_scheduler, loss_type):
     model.train()
