@@ -1,5 +1,5 @@
-import os
-os.environ["DEEPSPEED_LOG_LEVEL"] = "warning"
+import logging
+logging.disable(logging.WARNING)
 
 import shutil
 import numpy as np
@@ -11,6 +11,12 @@ from pathlib import Path
 import copy
 import deepspeed
 import wandb
+
+logging.getLogger("deepspeed").setLevel(logging.WARNING)
+logging.getLogger("deepspeed.runtime.engine").setLevel(logging.WARNING)
+logging.getLogger("deepspeed.runtime.activation_checkpointing.checkpointing").setLevel(logging.WARNING)
+logging.getLogger("deepspeed.runtime.zero.stage_1").setLevel(logging.WARNING)
+logging.getLogger("deepspeed.accelerator.real_accelerator").setLevel(logging.WARNING)
 
 from torchinfo import summary
 from tqdm import tqdm
