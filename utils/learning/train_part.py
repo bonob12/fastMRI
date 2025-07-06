@@ -22,8 +22,8 @@ from utils.common.loss_function import SSIMLoss
 from utils.model.varnet import VarNet
 
 
-def train_epoch(model, current_epoch_step, data_loader, lr_scheduler, loss_type):
-    model.train()
+def train_epoch(model_engine, current_epoch_step, data_loader, lr_scheduler, loss_type):
+    model_engine.train()
     start_epoch = time.perf_counter()
     len_loader = len(data_loader)
     total_loss = 0.
@@ -36,10 +36,10 @@ def train_epoch(model, current_epoch_step, data_loader, lr_scheduler, loss_type)
             target = target.cuda(non_blocking=True)
             maximum = maximum.cuda(non_blocking=True)
 
-            output = model(kspace, mask)
+            output = model_engine(kspace, mask)
             loss = loss_type(output, target, maximum)
-            model.backward(loss)
-            model.step()
+            model_engine.backward(loss)
+            model_engine.step()
 
             total_loss += loss.item()
             pbar.update(1)
@@ -58,8 +58,8 @@ def train_epoch(model, current_epoch_step, data_loader, lr_scheduler, loss_type)
     return total_loss / len_loader, time.perf_counter() - start_epoch
 
 
-def validate(model, data_loader):
-    model.eval()
+def validate(model_engine, data_loader):
+    model_engine.eval()
     reconstructions = defaultdict(dict)
     targets = defaultdict(dict)
     start = time.perf_counter()
@@ -71,7 +71,7 @@ def validate(model, data_loader):
                 mask, kspace, target, _, fnames, slices = data
                 kspace = kspace.cuda(non_blocking=True)
                 mask = mask.cuda(non_blocking=True)
-                output = model(kspace, mask)
+                output = model_engine(kspace, mask)
 
                 for i in range(output.shape[0]):
                     reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
@@ -132,10 +132,8 @@ def get_optimizer_grouped_parameters(model, weight_decay):
 def custom_lr_scheduler(optimizer, warmup_steps, total_steps, min_lr):
     def lr_lambda(current_step):
         if current_step < warmup_steps:
-            # linear warmup
             return float(current_step) / float(max(1, warmup_steps))
         else:
-            # cosine annealing
             progress = (current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
             cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
             return max(min_lr / optimizer.defaults['lr'], cosine_decay)
@@ -194,14 +192,16 @@ def train(args):
 
     param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-4)
     optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(param_groups, lr=args.lr)
+
+    optimizer_steps_per_epoch = (steps_per_epoch + args.gradient_accumulation_steps - 1) // args.gradient_accumulation_steps
     lr_scheduler = custom_lr_scheduler(
         optimizer, 
-        warmup_steps=steps_per_epoch, 
-        total_steps=args.num_epochs*steps_per_epoch,
-        min_lr=1e-6
+        warmup_steps = optimizer_steps_per_epoch, 
+        total_steps = args.num_epochs * optimizer_steps_per_epoch,
+        min_lr = 1e-6,
     )
 
-    model, optimizer, _, _ = deepspeed.initialize(
+    model_engine, _, _, _ = deepspeed.initialize(
         model=model,
         model_parameters=model.parameters(),
         optimizer=optimizer,
@@ -209,7 +209,7 @@ def train(args):
         config=ds_config,
     )
 
-    summary(model.module, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
+    summary(model_engine.module, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
 
     loss_type = SSIMLoss().to(device=device)
 
@@ -220,8 +220,8 @@ def train(args):
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch [{epoch + 1:2d}/{args.num_epochs:2d}] ............... {args.net_name} ...............')
         
-        train_loss, train_time = train_epoch(model, epoch * steps_per_epoch, train_loader, lr_scheduler, loss_type)
-        val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(model, val_loader)
+        train_loss, train_time = train_epoch(model_engine, epoch * steps_per_epoch, train_loader, lr_scheduler, loss_type)
+        val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(model_engine, val_loader)
        
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
         np.save(os.path.join(args.val_loss_dir, "val_loss_log"), val_loss_log)
@@ -243,7 +243,7 @@ def train(args):
             step = (epoch + 1) * steps_per_epoch
         )
 
-        save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best)
+        save_model(args, args.exp_dir, epoch + 1, model_engine.module, optimizer, best_val_loss, is_new_best)
         print(f"{'TrainLoss':<10}: {train_loss:9.4g}   {'ValLoss':<8}: {val_loss:8.4g}")
         print(f"{'TrainTime':<10}: {train_time:8.2f}s   {'ValTime':<8}: {val_time:7.2f}s")
 
