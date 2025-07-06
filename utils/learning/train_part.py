@@ -138,9 +138,9 @@ def train(args):
             "contiguous_gradients": True,
         },
         "activation_checkpointing": {
-            "partition_activations": True,
-            "contiguous_memory_optimization": True,
-            "cpu_checkpointing": True,
+            "partition_activations": False,
+            "contiguous_memory_optimization": False,
+            "cpu_checkpointing": False,
         },
         "compile_config": {
             "offload_activation": False,
