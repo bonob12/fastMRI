@@ -22,6 +22,7 @@ def parse():
 
     parser.add_argument('--batch_size', type=int, default=1, help='Batch size')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
+    parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--num_epochs', type=int, default=5, help='Number of epochs')
     parser.add_argument('--net_name', type=Path, default='test_varnet', help='Name of network')
     parser.add_argument('--data_path_train', type=Path, default='../Data/train/', help='Directory of train data')

@@ -1,9 +1,16 @@
 import h5py
 import random
+import torch
 from utils.data.transforms import DataTransform
 from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
+from functools import partial
 import numpy as np
+
+def worker_init_fn(worker_id, seed):
+    np.random.seed(seed + worker_id)
+    random.seed(seed + worker_id)
+    torch.manual_seed(seed + worker_id)
 
 class SliceData(Dataset):
     def __init__(self, root, transform, input_key, target_key, forward=False):
@@ -79,9 +86,17 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False):
         forward = isforward
     )
 
+    worker_init = partial(worker_init_fn, seed=args.seed)
+    g = torch.Generator()
+    g.manual_seed(args.seed)
+
     data_loader = DataLoader(
         dataset=data_storage,
         batch_size=args.batch_size,
         shuffle=shuffle,
+        generator=g,
+        num_workers=args.num_workers,
+        pin_memory=True,
+        worker_init_fn=worker_init,
     )
     return data_loader

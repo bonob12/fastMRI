@@ -2,6 +2,7 @@ python train.py \
 --not_sweep \
 --batch_size 1 \
 --gradient_accumulation_steps 2 \
+--num_workers 4 \
 --num_epochs 5 \
 --net_name test_varnet \
 --data_path_train ../Data/train/ \

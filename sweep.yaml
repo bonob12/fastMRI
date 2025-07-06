@@ -10,6 +10,8 @@ parameters:
     value: 1
   gradient_accumulation_steps:
     value: 2 
+  num_workers:
+    value: 4
   num_epochs:
     value: 5
   net_name:

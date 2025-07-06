@@ -1,3 +1,6 @@
+import os
+os.environ["DEEPSPEED_LOG_LEVEL"] = "warning"
+
 import shutil
 import numpy as np
 import torch
