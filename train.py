@@ -48,12 +48,12 @@ if __name__ == '__main__':
     if args.not_sweep:
         wandb.init(
             project="test_varnet",    
-            dir="../result/test_Varnet",
+            dir="../result/test_varnet",
             config=vars(args),
         )
     else:
         wandb.init(
-            dir="../result/test_Varnet",
+            dir="../result/test_varnet",
         )
         config = wandb.config
         args = argparse.Namespace(**config)

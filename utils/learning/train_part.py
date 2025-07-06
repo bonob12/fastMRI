@@ -5,6 +5,7 @@ import torch.nn as nn
 import time
 from pathlib import Path
 import copy
+import deepspeed
 import wandb
 
 from torchinfo import summary
@@ -19,11 +20,11 @@ import os
 
 def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
     model.train()
-    start_epoch = start_iter = time.perf_counter()
+    start_epoch = time.perf_counter()
     len_loader = len(data_loader)
     total_loss = 0.
 
-    with tqdm(total=len_loader, desc=f"{'Train':<6}") as pbar:
+    with tqdm(total=len_loader, desc=f"{'Train':<6}", ncols=120) as pbar:
         for iter, data in enumerate(data_loader):
             mask, kspace, target, maximum, _, _ = data
             mask = mask.cuda(non_blocking=True)
@@ -34,18 +35,17 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
             output = model(kspace, mask)
             loss = loss_type(output, target, maximum)
             optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            total_loss += loss.item()
+            model.backward(loss)
+            model.step()
 
+            total_loss += loss.item()
             pbar.update(1)
 
             if iter % args.report_interval == 0:
                 pbar.set_postfix(loss=f"{loss.item():.4g}")
                 wandb.log({"loss": loss.item()})
 
-    total_loss = total_loss / len_loader
-    return total_loss, time.perf_counter() - start_epoch
+    return total_loss / len_loader, time.perf_counter() - start_epoch
 
 
 def validate(args, model, data_loader):
@@ -56,7 +56,7 @@ def validate(args, model, data_loader):
     len_loader = len(data_loader)
 
     with torch.no_grad():
-        with tqdm(total=len_loader, desc=f"{'Val':<6}") as pbar:
+        with tqdm(total=len_loader, desc=f"{'Val':<6}", ncols=120) as pbar:
             for iter, data in enumerate(data_loader):
                 mask, kspace, target, _, fnames, slices = data
                 kspace = kspace.cuda(non_blocking=True)
@@ -66,7 +66,6 @@ def validate(args, model, data_loader):
                 for i in range(output.shape[0]):
                     reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
                     targets[fnames[i]][int(slices[i])] = target[i].numpy()
-                
                 pbar.update(1)
 
     for fname in reconstructions:
@@ -101,6 +100,12 @@ def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_bes
         # artifact.add_file(str(exp_dir / 'best_model.pt'))
         # logged_artifact = wandb.log_artifact(artifact)
         # logged_artifact.wait()
+
+def custom_lr_lambda(current_step: int):
+    warmup_steps = 1000
+    if current_step < warmup_steps:
+        return float(current_step) / float(max(1, warmup_steps))
+    return 1.0
         
 def train(args):
     device = torch.device(f'cuda:{args.GPU_NUM}' if torch.cuda.is_available() else 'cpu')
@@ -116,14 +121,52 @@ def train(args):
     )
     model.to(device=device)
 
+    ds_config = {
+        "train_batch_size": args.batch_size,
+        "train_micro_batch_size_per_gpu": args.batch_size,
+        "gradient_accumulation_steps": 1, 
+        "gradient_clipping": 1.0, 
+        "fp16": {
+            "enabled": False,
+        },
+        "zero_optimization": {
+            "stage": 1,
+            "offload_optimizer": {
+                "device": "cpu",
+                "pin_memory": True,
+            },
+            "contiguous_gradients": True,
+        },
+        "activation_checkpointing": {
+            "partition_activations": True,
+            "contiguous_memory_optimization": True,
+            "cpu_checkpointing": True,
+        },
+        "compile_config": {
+            "offload_activation": False,
+        },
+        "memory_breakdown": False,
+        "wall_clock_breakdown": False,
+    }
+
+    optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model.parameters(), args.lr)
+    lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=custom_lr_lambda)
+
+    model, optimizer, lr_scheduler, _ = deepspeed.initialize(
+        model=model,
+        model_parameters=model.parameters(),
+        optimizer=optimizer,
+        lr_scheduler=lr_scheduler,
+        config=ds_config,
+    )
+
     dummy_loader = create_data_loaders(data_path = args.data_path_train, args = args)
     sample = next(iter(dummy_loader))
-    kspace = sample[1]  # index 1이 kspace
+    kspace = sample[1]
     mask = sample[0]
-    summary(model, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
+    summary(model.module, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
 
     loss_type = SSIMLoss().to(device=device)
-    optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
     best_val_loss = 1.
     start_epoch = 0
@@ -140,8 +183,7 @@ def train(args):
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
        
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
-        file_path = os.path.join(args.val_loss_dir, "val_loss_log")
-        np.save(file_path, val_loss_log)
+        np.save(os.path.join(args.val_loss_dir, "val_loss_log"), val_loss_log)
 
         train_loss = torch.tensor(train_loss).cuda(non_blocking=True)
         val_loss = torch.tensor(val_loss).cuda(non_blocking=True)
