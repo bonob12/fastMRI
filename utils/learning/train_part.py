@@ -154,9 +154,9 @@ def train(args):
     model.to(device=device)
 
     ds_config = {
-        "train_batch_size": args.batch_size,
-        "train_micro_batch_size_per_gpu": args.batch_size,
-        "gradient_accumulation_steps": 1, 
+        "train_batch_size": args.gradient_accumulation_steps,
+        "train_micro_batch_size_per_gpu": 1,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps, 
         "gradient_clipping": 1.0, 
         "fp16": {
             "enabled": False,
