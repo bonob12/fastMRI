@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import time
+import math
 from pathlib import Path
 import copy
 import deepspeed
@@ -18,7 +19,7 @@ from utils.model.varnet import VarNet
 
 import os
 
-def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
+def train_epoch(model, current_epoch_step, data_loader, lr_scheduler, loss_type):
     model.train()
     start_epoch = time.perf_counter()
     len_loader = len(data_loader)
@@ -34,21 +35,27 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
 
             output = model(kspace, mask)
             loss = loss_type(output, target, maximum)
-            optimizer.zero_grad()
             model.backward(loss)
             model.step()
 
             total_loss += loss.item()
             pbar.update(1)
-
-            if iter % args.report_interval == 0:
+            
+            if iter % 10 == 0:
                 pbar.set_postfix(loss=f"{loss.item():.4g}")
-                wandb.log({"loss": loss.item()})
+
+            if iter % 100 == 0:
+                wandb.log({
+                        "loss": loss.item(),
+                        "lr": lr_scheduler.get_last_lr()[0],
+                    },
+                    step = current_epoch_step + iter
+                )
 
     return total_loss / len_loader, time.perf_counter() - start_epoch
 
 
-def validate(args, model, data_loader):
+def validate(model, data_loader):
     model.eval()
     reconstructions = defaultdict(dict)
     targets = defaultdict(dict)
@@ -101,15 +108,40 @@ def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_bes
         # logged_artifact = wandb.log_artifact(artifact)
         # logged_artifact.wait()
 
-def custom_lr_lambda(current_step: int):
-    warmup_steps = 1000
-    if current_step < warmup_steps:
-        return float(current_step) / float(max(1, warmup_steps))
-    return 1.0
+def get_optimizer_grouped_parameters(model, weight_decay):
+    decay = []
+    no_decay = []
+
+    for name, param in model.named_parameters():
+        if not param.requires_grad:
+            continue
+
+        if "bias" in name or any(norm_name in name.lower() for norm_name in ["layernorm", "batchnorm", "instancenorm"]):
+            no_decay.append(param)
+        else:
+            decay.append(param)
+
+    return [
+        {"params": decay, "weight_decay": weight_decay},
+        {"params": no_decay, "weight_decay": 0.0},
+    ]
+
+def custom_lr_scheduler(optimizer, warmup_steps, total_steps, min_lr):
+    def lr_lambda(current_step):
+        if current_step < warmup_steps:
+            # linear warmup
+            return float(current_step) / float(max(1, warmup_steps))
+        else:
+            # cosine annealing
+            progress = (current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+            cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
+            return max(min_lr / optimizer.defaults['lr'], cosine_decay)
+
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
         
 def train(args):
-    device = torch.device(f'cuda:{args.GPU_NUM}' if torch.cuda.is_available() else 'cpu')
-    torch.cuda.set_device(device)
+    device = torch.device(f'cuda:0' if torch.cuda.is_available() else 'cpu')
+    torch.cuda.set_device(0)
     print('Current cuda device: ', torch.cuda.current_device())
 
     model = VarNet(
@@ -149,10 +181,24 @@ def train(args):
         "wall_clock_breakdown": False,
     }
 
-    optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(model.parameters(), args.lr)
-    lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=custom_lr_lambda)
+    train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
+    val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
 
-    model, optimizer, lr_scheduler, _ = deepspeed.initialize(
+    sample = next(iter(train_loader))
+    kspace = sample[1]
+    mask = sample[0]
+    steps_per_epoch = len(train_loader)
+
+    param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-4)
+    optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(param_groups, lr=args.lr)
+    lr_scheduler = custom_lr_scheduler(
+        optimizer, 
+        warmup_steps=steps_per_epoch, 
+        total_steps=args.num_epochs*steps_per_epoch,
+        min_lr=1e-6
+    )
+
+    model, optimizer, _, _ = deepspeed.initialize(
         model=model,
         model_parameters=model.parameters(),
         optimizer=optimizer,
@@ -160,34 +206,26 @@ def train(args):
         config=ds_config,
     )
 
-    dummy_loader = create_data_loaders(data_path = args.data_path_train, args = args)
-    sample = next(iter(dummy_loader))
-    kspace = sample[1]
-    mask = sample[0]
     summary(model.module, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
 
     loss_type = SSIMLoss().to(device=device)
 
     best_val_loss = 1.
     start_epoch = 0
-
-    
-    train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
-    val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
     
     val_loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):
-        print(f'Epoch [{epoch:2d}/{args.num_epochs:2d}] ............... {args.net_name} ...............')
+        print(f'Epoch [{epoch + 1:2d}/{args.num_epochs:2d}] ............... {args.net_name} ...............')
         
-        train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type)
-        val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
+        train_loss, train_time = train_epoch(model, epoch * steps_per_epoch, train_loader, lr_scheduler, loss_type)
+        val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(model, val_loader)
        
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
         np.save(os.path.join(args.val_loss_dir, "val_loss_log"), val_loss_log)
 
-        train_loss = torch.tensor(train_loss).cuda(non_blocking=True)
-        val_loss = torch.tensor(val_loss).cuda(non_blocking=True)
-        num_subjects = torch.tensor(num_subjects).cuda(non_blocking=True)
+        train_loss = torch.tensor(train_loss)
+        val_loss = torch.tensor(val_loss)
+        num_subjects = torch.tensor(num_subjects)
 
         val_loss = val_loss / num_subjects
 
@@ -195,14 +233,16 @@ def train(args):
         best_val_loss = min(best_val_loss, val_loss)
 
         wandb.log({
-            "epoch": epoch,
-            "train_loss": train_loss.item(),
-            "val_loss": val_loss.item()
-        })
+                "epoch": epoch + 1,
+                "train_loss": train_loss.item(),
+                "val_loss": val_loss.item(),
+            },
+            step = (epoch + 1) * steps_per_epoch
+        )
 
         save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best)
-        print(f"{'TrainLoss':<10}: {train_loss:.4g}     {'ValLoss':<10}: {val_loss:.4g}")
-        print(f"{'TrainTime':<10}: {train_time:.2f}s   {'ValTime':<10}: {val_time:.2f}s")
+        print(f"{'TrainLoss':<10}: {train_loss:9.4g}   {'ValLoss':<8}: {val_loss:8.4g}")
+        print(f"{'TrainTime':<10}: {train_time:8.2f}s   {'ValTime':<8}: {val_time:7.2f}s")
 
         if is_new_best:
             print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@")

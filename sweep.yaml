@@ -6,24 +6,20 @@ program: train.py
 project: test_varnet_sweep
 
 parameters:
-  GPU_NUM:
-    value: 0
   batch_size:
     value: 1
   num_epochs:
     value: 5
-  lr:
-    distribution: log_uniform_values
-    min: 0.0001
-    max: 0.01
-  report_interval:
-    value: 10
   net_name:
     value: "test_varnet"
   data_path_train:
     value: "../Data/train/"
   data_path_val:
     value: "../Data/val/"
+  lr:
+    distribution: log_uniform_values
+    min: 0.0001
+    max: 0.01
   cascade:
     distribution: int_uniform
     min: 1
