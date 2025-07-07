@@ -56,7 +56,7 @@ def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler,
             if iter % 10 == 0:
                 pbar.set_postfix(loss=f"{loss.item():.4g}")
 
-            if iter % 100 == 0:
+            if iter % 50 == 0:
                 wandb.log({
                         "epoch": epoch + 1,
                         "loss": loss.item(),
@@ -101,20 +101,20 @@ def validate(model_engine, data_loader):
     return metric_loss, num_subjects, reconstructions, targets, None, time.perf_counter() - start
 
 
-def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_best):
+def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_new_best):
     torch.save(
         {
-            'epoch': epoch,
             'args': args,
+            'epoch': epoch,
             'model': model.state_dict(),
             'optimizer': optimizer.state_dict(),
+            'lr_scheduler': lr_scheduler.state_dict(),
             'best_val_loss': best_val_loss,
-            'exp_dir': exp_dir
         },
-        f=exp_dir / 'model.pt'
+        f = args.exp_dir / 'model.pt'
     )
     if is_new_best:
-        shutil.copyfile(exp_dir / 'model.pt', exp_dir / 'best_model.pt')
+        shutil.copyfile(args.exp_dir / 'model.pt', args.exp_dir / 'best_model.pt')
 
         # artifact = wandb.Artifact(name="best_model", type="model")
         # artifact.add_file(str(exp_dir / 'best_model.pt'))
@@ -157,6 +157,19 @@ def train(args):
     device = torch.device(f'cuda:0' if torch.cuda.is_available() else 'cpu')
     torch.cuda.set_device(0)
     print('Current cuda device: ', torch.cuda.current_device())
+
+    if args.restart_from_checkpoint is not None:
+        checkpoint = torch.load(args.restart_from_checkpoint, map_location=device, weights_only=False)
+        saved_args = checkpoint['args']
+        saved_args.exp_dir = args.exp_dir
+        saved_args.val_dir = args.val_dir
+        saved_args.val_loss_dir = args.val_loss_dir
+        saved_args.restart_from_checkpoint = args.restart_from_checkpoint
+        saved_args.restart_from_checkpoint = args.continue_lr_scheduler
+        if not args.continue_lr_scheduler:
+            saved_args.lr = args.lr
+            saved_args.num_epochs = args.num_epochs
+        args = saved_args
 
     ModelClass = resolve_class(args.model_name)
 
@@ -236,12 +249,12 @@ def train(args):
     param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-4)
     optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(param_groups, lr=args.lr)
 
-    optimizer_steps_per_epoch = (steps_per_epoch + args.gradient_accumulation_steps - 1) // args.gradient_accumulation_steps
+    optimizer_steps_per_epoch = steps_per_epoch // args.gradient_accumulation_steps
     lr_scheduler = custom_lr_scheduler(
         optimizer, 
         warmup_steps = optimizer_steps_per_epoch, 
         total_steps = args.num_epochs * optimizer_steps_per_epoch,
-        min_lr = 1e-6,
+        min_lr = 0,
     )
 
     model_engine, _, _, _ = deepspeed.initialize(
@@ -253,15 +266,30 @@ def train(args):
     )
 
     # summary(model_engine.module, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
+    
+    if args.restart_from_checkpoint is not None:
+        start_epoch = checkpoint['epoch']
+        best_val_loss = checkpoint['best_val_loss']
+
+        print(f"Restarted training from epoch {start_epoch + 1} with best_val_loss {best_val_loss:.4f}")
+        model_engine.module.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+
+        if args.continue_lr_scheduler:
+            args.num_epochs = args.num_epochs - start_epoch
+            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            print("Previous lr_scheduler continued")
+        else:
+            print("New lr_scheduler applied")
+    else:
+        start_epoch = 0
+        best_val_loss = 1.
 
     loss_type = SSIMLoss().to(device=device)
-
-    best_val_loss = 1.
-    start_epoch = 0
     
     val_loss_log = np.empty((0, 2))
-    for epoch in range(start_epoch, args.num_epochs):
-        print(f'Epoch [{epoch + 1:2d}/{args.num_epochs:2d}] ............... {args.net_name} ...............')
+    for epoch in range(start_epoch, start_epoch + args.num_epochs):
+        print(f'Epoch [{epoch + 1:2d}/{start_epoch + args.num_epochs:2d}] ............... {args.net_name} ...............')
         
         train_loss, train_time = train_epoch(model_engine, epoch, steps_per_epoch, train_loader, lr_scheduler, loss_type)
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(model_engine, val_loader)
@@ -285,7 +313,7 @@ def train(args):
             step = (epoch + 1) * steps_per_epoch - 1
         )
 
-        save_model(args, args.exp_dir, epoch + 1, model_engine.module, optimizer, best_val_loss, is_new_best)
+        save_model(args, epoch + 1, model_engine.module, optimizer, lr_scheduler, best_val_loss, is_new_best)
         print(f"{'TrainLoss':<10}: {train_loss:9.4g}   {'ValLoss':<8}: {val_loss:8.4g}")
         print(f"{'TrainTime':<10}: {train_time:8.2f}s   {'ValTime':<8}: {val_time:7.2f}s")
 

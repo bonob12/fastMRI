@@ -17,4 +17,6 @@ python train.py \
 --input_key kspace \
 --target_key image_label \
 --max_key max \
---seed 430
+--seed 430 \
+# --restart_from_checkpoint ../result/test_varnet/checkpoints/0707_203020-tz597zye/best_model.pt \
+# --continue_lr_scheduler True

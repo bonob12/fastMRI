@@ -8,16 +8,16 @@ python train_pmr.py \
 --model_name utils.model.promptmr.PromptMR \
 --data_path_train ../Data/train/ \
 --data_path_val ../Data/val/ \
---lr 1e-3 \
+--lr 3e-4 \
 --num_cascades 1 \
 --num_adj_slices 1 \
---n_feat0 48 \
---feature_dim 72 96 120 \
---prompt_dim 24 48 72 \
---sens_n_feat0 24 \
---sens_feature_dim 36 48 60 \
---sens_prompt_dim 12 24 36 \
---len_prompt 5 5 5 \
+--n_feat0 12 \
+--feature_dim 16 20 24 \
+--prompt_dim 4 8 12 \
+--sens_n_feat0 4 \
+--sens_feature_dim 6 8 10 \
+--sens_prompt_dim 2 4 6 \
+--len_prompt 2 2 2 \
 --prompt_size 64 32 16 \
 --n_enc_cab 2 3 3 \
 --n_dec_cab 2 2 3 \
@@ -28,9 +28,11 @@ python train_pmr.py \
 --no_use_ca True \
 --learnable_prompt False \
 --adaptive_input False \
---use_sens_adj True \
---compute_sens_per_coil True \
+--use_sens_adj False \
+--compute_sens_per_coil False \
 --input_key kspace \
 --target_key image_label \
 --max_key max \
---seed 430
+--seed 430 \
+# --restart_from_checkpoint ../result/test_promptmr/checkpoints/0707_165655-9zbeok11/best_model.pt \
+# --continue_lr_scheduler True

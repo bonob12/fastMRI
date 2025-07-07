@@ -15,6 +15,17 @@ if os.getcwd() + '/utils/common/' not in sys.path:
 from utils.common.utils import seed_fix
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
+        return True
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 def parse():
     parser = argparse.ArgumentParser(description='Train Varnet on FastMRI challenge Images',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -39,6 +50,9 @@ def parse():
     parser.add_argument('--target_key', type=str, default='image_label', help='Name of target key')
     parser.add_argument('--max_key', type=str, default='max', help='Name of max key in attributes')
     parser.add_argument('--seed', type=int, default=430, help='Fix random seed')
+
+    parser.add_argument('--restart_from_checkpoint', type=Path, default=None)
+    parser.add_argument('--continue_lr_scheduler', type=str2bool, default=True)
 
     args = parser.parse_args()
     return args
