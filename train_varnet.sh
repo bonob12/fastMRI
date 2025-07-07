@@ -1,5 +1,4 @@
 python train.py \
---not_sweep \
 --batch_size 1 \
 --gradient_accumulation_steps 2 \
 --num_workers 4 \

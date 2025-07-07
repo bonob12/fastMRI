@@ -1,5 +1,4 @@
-python train_pmr.py \
---not_sweep \
+python train.py \
 --batch_size 1 \
 --gradient_accumulation_steps 2 \
 --num_workers 4 \
@@ -12,16 +11,16 @@ python train_pmr.py \
 --num_cascades 1 \
 --num_adj_slices 1 \
 --n_feat0 12 \
---feature_dim 16 20 24 \
---prompt_dim 4 8 12 \
+--feature_dim '16 20 24' \
+--prompt_dim '4 8 12' \
 --sens_n_feat0 4 \
---sens_feature_dim 6 8 10 \
---sens_prompt_dim 2 4 6 \
---len_prompt 2 2 2 \
---prompt_size 64 32 16 \
---n_enc_cab 2 3 3 \
---n_dec_cab 2 2 3 \
---n_skip_cab 1 1 1 \
+--sens_feature_dim '6 8 10' \
+--sens_prompt_dim '2 4 6' \
+--len_prompt '2 2 2' \
+--prompt_size '64 32 16' \
+--n_enc_cab '2 3 3' \
+--n_dec_cab '2 2 3' \
+--n_skip_cab '1 1 1' \
 --n_bottleneck_cab 3 \
 --n_buffer 0 \
 --n_history 0 \

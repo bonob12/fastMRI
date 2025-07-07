@@ -173,7 +173,7 @@ def train(args):
 
     ModelClass = resolve_class(args.model_name)
 
-    if "VarNet" in args.model_name:
+    if args.model_name.endswith("VarNet"):
         model = ModelClass(
             num_cascades=args.cascade, 
             chans=args.chans, 
@@ -181,7 +181,7 @@ def train(args):
             sens_chans=args.sens_chans,
             sens_pools=args.sens_pools,
         )
-    elif "PromptMR" in args.model_name:
+    elif args.model_name.endswith("PromptMR"):
         model = ModelClass(
             num_cascades=args.num_cascades,
             num_adj_slices=args.num_adj_slices,
