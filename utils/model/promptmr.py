@@ -410,7 +410,7 @@ class PromptMRBlock(nn.Module):
     ):
         zero = torch.zeros(1, 1, 1, 1, 1).to(current_img)
         current_kspace = sens_expand(current_img, sens_maps, self.num_adj_slices)
-        ffx = sens_reduce(torch.where(mask, current_kspace, zero), sens_maps, self.num_adj_slices)
+        ffx = sens_reduce(torch.where(mask.bool(), current_kspace, zero), sens_maps, self.num_adj_slices)
         if self.model.n_buffer > 0:
             # adaptive input. buffer: A^H*A*x_i, s_i, x0, A^H*A*x_i-x0
             buffer = torch.cat([ffx, latent, img_zf] + [ffx-img_zf]*(self.model.n_buffer-3), dim=1)
