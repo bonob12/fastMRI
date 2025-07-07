@@ -15,7 +15,9 @@ parameters:
   num_epochs:
     value: 5
   net_name:
-    value: "test_varnet"
+    value: "test_varnet_sweep"
+  model_name:
+    value: "utils.model.varnet.VarNet"
   data_path_train:
     value: "../Data/train/"
   data_path_val:

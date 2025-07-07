@@ -12,6 +12,7 @@ from pathlib import Path
 import copy
 import deepspeed
 import wandb
+import importlib
 
 from torchinfo import summary
 from tqdm import tqdm
@@ -20,6 +21,14 @@ from utils.data.load_data import create_data_loaders
 from utils.common.utils import save_reconstructions, ssim_loss
 from utils.common.loss_function import SSIMLoss
 from utils.model.varnet import VarNet
+
+def resolve_class(class_path: str):
+    try:
+        module_name, class_name = class_path.rsplit('.', 1)
+        module = importlib.import_module(module_name)
+        return getattr(module, class_name)
+    except (ImportError, AttributeError) as e:
+        raise ImportError(f"Could not resolve class '{class_path}'. Error: {e}")
 
 
 def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler, loss_type):
@@ -112,6 +121,7 @@ def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_bes
         # logged_artifact = wandb.log_artifact(artifact)
         # logged_artifact.wait()
 
+
 def get_optimizer_grouped_parameters(model, weight_decay):
     decay = []
     no_decay = []
@@ -130,6 +140,7 @@ def get_optimizer_grouped_parameters(model, weight_decay):
         {"params": no_decay, "weight_decay": 0.0},
     ]
 
+
 def custom_lr_scheduler(optimizer, warmup_steps, total_steps, min_lr):
     def lr_lambda(current_step):
         if current_step < warmup_steps:
@@ -141,18 +152,49 @@ def custom_lr_scheduler(optimizer, warmup_steps, total_steps, min_lr):
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
         
+
 def train(args):
     device = torch.device(f'cuda:0' if torch.cuda.is_available() else 'cpu')
     torch.cuda.set_device(0)
     print('Current cuda device: ', torch.cuda.current_device())
 
-    model = VarNet(
-        num_cascades=args.cascade, 
-        chans=args.chans, 
-        pools=args.pools,
-        sens_chans=args.sens_chans,
-        sens_pools=args.sens_pools,
-    )
+    ModelClass = resolve_class(args.model_name)
+
+    if "VarNet" in args.model_name:
+        model = ModelClass(
+            num_cascades=args.cascade, 
+            chans=args.chans, 
+            pools=args.pools,
+            sens_chans=args.sens_chans,
+            sens_pools=args.sens_pools,
+        )
+    elif "PromptMR" in args.model_name:
+        model = ModelClass(
+            num_cascades=args.cascade, 
+            num_adj_slices=args.num_adj_slices,
+            n_feat0=args.n_feat0,
+            feature_dim=args.feature_dim,
+            prompt_dim=args.prompt_dim,
+            sens_n_feat0=args.sens_n_feat0,
+            sens_feature_dim=args.sens_feature_dim,
+            sens_prompt_dim=args.sens_prompt_dim,
+            len_prompt=args.len_prompt,
+            prompt_size=args.prompt_size,
+            n_enc_cab=args.n_enc_cab,
+            n_dec_cab=args.n_dec_cab,
+            n_skip_cab=args.n_skip_cab,
+            n_bottleneck_cab=args.n_bottleneck_cab,
+            n_buffer=args.n_buffer,
+            n_history=args.n_history,
+            no_use_ca=args.no_use_ca,
+            learnable_prompt=args.learnable_prompt,
+            adaptive_input=args.adaptive_input,
+            use_sens_adj=args.use_sens_adj,
+            compute_sens_per_coil=args.compute_sens_per_coil,
+        )
+    else:
+        raise ValueError("No matching model")
+
     model.to(device=device)
 
     ds_config = {

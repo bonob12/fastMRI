@@ -15,6 +15,17 @@ if os.getcwd() + '/utils/common/' not in sys.path:
 from utils.common.utils import seed_fix
 
 
+def str2bool(v):
+    if isinstance(v, bool):
+        return v
+    if v.lower() in ('true'):
+        return True
+    elif v.lower() in ('false'):
+        return False
+    else:
+        raise argparse.ArgumentTypeError('Boolean value expected.')
+
+
 def parse():
     parser = argparse.ArgumentParser(description='Train Varnet on FastMRI challenge Images',
                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -25,16 +36,39 @@ def parse():
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--num_epochs', type=int, default=5, help='Number of epochs')
     parser.add_argument('--net_name', type=Path, default='test_varnet', help='Name of network')
-    parser.add_argument('--model_name', type=str, default="utils.model.varnet.VarNet", help='Name of model')
     parser.add_argument('--data_path_train', type=Path, default='../Data/train/', help='Directory of train data')
     parser.add_argument('--data_path_val', type=Path, default='../Data/val/', help='Directory of validation data')
     
     parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
-    parser.add_argument('--cascade', type=int, default=1, help='Number of cascades | Should be less than 12') ## important hyperparameter
-    parser.add_argument('--chans', type=int, default=9, help='Number of channels for cascade U-Net | 18 in original varnet') ## important hyperparameter
-    parser.add_argument('--sens_chans', type=int, default=4, help='Number of channels for sensitivity map U-Net | 8 in original varnet')
-    parser.add_argument('--pools', type=int, default=4)
-    parser.add_argument('--sens_pools', type=int, default=4)
+
+    parser.add_argument('--num_cascades', type=int, default=1)
+    parser.add_argument('--num_adj_slices', type=int, default=1)
+
+    parser.add_argument('--n_feat0', type=int, default=48)
+    parser.add_argument('--feature_dim', nargs='+', type=int, default=[72, 96, 120])
+    parser.add_argument('--prompt_dim', nargs='+', type=int, default=[24, 48, 72])
+
+    parser.add_argument('--sens_n_feat0', type=int, default=24)
+    parser.add_argument('--sens_feature_dim', nargs='+', type=int, default=[36, 48, 60])
+    parser.add_argument('--sens_prompt_dim', nargs='+', type=int, default=[12, 24, 36])
+
+    parser.add_argument('--len_prompt', nargs='+', type=int, default=[5, 5, 5])
+    parser.add_argument('--prompt_size', nargs='+', type=int, default=[64, 32, 16])
+
+    parser.add_argument('--n_enc_cab', nargs='+', type=int, default=[2, 3, 3])
+    parser.add_argument('--n_dec_cab', nargs='+', type=int, default=[2, 2, 3])
+    parser.add_argument('--n_skip_cab', nargs='+', type=int, default=[1, 1, 1])
+    parser.add_argument('--n_bottleneck_cab', type=int, default=3)
+
+    parser.add_argument('--n_buffer', type=int, default=0)
+    parser.add_argument('--n_history', type=int, default=0)
+
+    parser.add_argument('--no_use_ca', type=str2bool)
+    parser.add_argument('--learnable_prompt', type=str2bool)
+    parser.add_argument('--adaptive_input', type=str2bool)
+    parser.add_argument('--use_sens_adj', type=str2bool)
+    parser.add_argument('--compute_sens_per_coil', type=str2bool)
+
     parser.add_argument('--input_key', type=str, default='kspace', help='Name of input key')
     parser.add_argument('--target_key', type=str, default='image_label', help='Name of target key')
     parser.add_argument('--max_key', type=str, default='max', help='Name of max key in attributes')
@@ -42,6 +76,7 @@ def parse():
 
     args = parser.parse_args()
     return args
+
 
 if __name__ == '__main__':
     args = parse()
@@ -54,7 +89,7 @@ if __name__ == '__main__':
         )
     else:
         wandb.init(
-            dir="../results/test_varnet_sweep"
+            dir="../results/test_promptmr_sweep"
         )
         config = wandb.config
         args = argparse.Namespace(**config)

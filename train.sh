@@ -5,6 +5,7 @@ python train.py \
 --num_workers 4 \
 --num_epochs 5 \
 --net_name test_varnet \
+--model_name utils.model.varnet.VarNet \
 --data_path_train ../Data/train/ \
 --data_path_val ../Data/val/ \
 --lr 1e-3 \

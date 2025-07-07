@@ -1,0 +1,36 @@
+python train.py \
+--not_sweep \
+--batch_size 1 \
+--gradient_accumulation_steps 2 \
+--num_workers 4 \
+--num_epochs 5 \
+--net_name test_promptmr \
+--model_name promptmr.PromptMR
+--data_path_train ../Data/train/ \
+--data_path_val ../Data/val/ \
+--lr 1e-3 \
+--num_cascades 1 \
+--num_adj_slices 1 \
+--n_feat0: 48 \
+--feature_dim 72 96 120 \
+--prompt_dim 24 48 72 \
+--sens_n_feat0 24 \
+--sens_feature_dim 36 48 60 \
+--sens_prompt_dim 12 24 36 \
+--len_prompt 5 5 5 \
+--prompt_size 64 32 16 \
+--n_enc_cab 2 3 3 \
+--n_dec_cab 2 2 3 \
+--n_skip_cab 1 1 1 \
+--n_bottleneck_cab 3 \
+--n_buffer 0 \
+--n_history 0 \
+--no_use_ca true \
+--learnable_prompt false \
+--adaptive_input false \
+--use_sens_adj true \
+--compute_sens_per_coil true \
+--input_key kspace \
+--target_key image_label \
+--max_key max \
+--seed 430
