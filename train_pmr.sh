@@ -1,17 +1,17 @@
-python train.py \
+python train_pmr.py \
 --not_sweep \
 --batch_size 1 \
 --gradient_accumulation_steps 2 \
 --num_workers 4 \
 --num_epochs 5 \
 --net_name test_promptmr \
---model_name promptmr.PromptMR
+--model_name utils.model.promptmr.PromptMR \
 --data_path_train ../Data/train/ \
 --data_path_val ../Data/val/ \
 --lr 1e-3 \
 --num_cascades 1 \
 --num_adj_slices 1 \
---n_feat0: 48 \
+--n_feat0 48 \
 --feature_dim 72 96 120 \
 --prompt_dim 24 48 72 \
 --sens_n_feat0 24 \
@@ -25,11 +25,11 @@ python train.py \
 --n_bottleneck_cab 3 \
 --n_buffer 0 \
 --n_history 0 \
---no_use_ca true \
---learnable_prompt false \
---adaptive_input false \
---use_sens_adj true \
---compute_sens_per_coil true \
+--no_use_ca True \
+--learnable_prompt False \
+--adaptive_input False \
+--use_sens_adj True \
+--compute_sens_per_coil True \
 --input_key kspace \
 --target_key image_label \
 --max_key max \

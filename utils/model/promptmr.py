@@ -617,7 +617,7 @@ class PromptMR(nn.Module):
 
         # get central slice of rss as final output
         result = torch.chunk(img_pred, self.num_adj_slices, dim=1)[self.center_slice]
-        result = rss(complex_abs(complex_mul(img_pred, sens_maps)), dim=1)
+        result = rss(complex_abs(complex_mul(result, sens_maps)), dim=1)
         result = center_crop(result, 384, 384)
         
         return result

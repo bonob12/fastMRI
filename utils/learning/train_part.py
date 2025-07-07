@@ -170,7 +170,7 @@ def train(args):
         )
     elif "PromptMR" in args.model_name:
         model = ModelClass(
-            num_cascades=args.cascade, 
+            num_cascades=args.num_cascades,
             num_adj_slices=args.num_adj_slices,
             n_feat0=args.n_feat0,
             feature_dim=args.feature_dim,
@@ -252,7 +252,7 @@ def train(args):
         config=ds_config,
     )
 
-    summary(model_engine.module, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
+    # summary(model_engine.module, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
 
     loss_type = SSIMLoss().to(device=device)
 

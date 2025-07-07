@@ -18,9 +18,9 @@ from utils.common.utils import seed_fix
 def str2bool(v):
     if isinstance(v, bool):
         return v
-    if v.lower() in ('true'):
+    if v.lower() in ('yes', 'true', 't', 'y', '1'):
         return True
-    elif v.lower() in ('false'):
+    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
@@ -36,6 +36,7 @@ def parse():
     parser.add_argument('--num_workers', type=int, default=4)
     parser.add_argument('--num_epochs', type=int, default=5, help='Number of epochs')
     parser.add_argument('--net_name', type=Path, default='test_varnet', help='Name of network')
+    parser.add_argument('--model_name', type=str, default="utils.model.promptmr.PromptMR", help='Name of model')
     parser.add_argument('--data_path_train', type=Path, default='../Data/train/', help='Directory of train data')
     parser.add_argument('--data_path_val', type=Path, default='../Data/val/', help='Directory of validation data')
     
