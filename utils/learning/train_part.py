@@ -22,7 +22,7 @@ from utils.common.loss_function import SSIMLoss
 from utils.model.varnet import VarNet
 
 
-def train_epoch(model_engine, current_epoch_step, data_loader, lr_scheduler, loss_type):
+def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler, loss_type):
     model_engine.train()
     start_epoch = time.perf_counter()
     len_loader = len(data_loader)
@@ -49,10 +49,11 @@ def train_epoch(model_engine, current_epoch_step, data_loader, lr_scheduler, los
 
             if iter % 100 == 0:
                 wandb.log({
+                        "epoch": epoch + 1,
                         "loss": loss.item(),
                         "lr": lr_scheduler.get_last_lr()[0],
                     },
-                    step = current_epoch_step + iter
+                    step = epoch * steps_per_epoch + iter
                 )
 
     return total_loss / len_loader, time.perf_counter() - start_epoch
@@ -220,7 +221,7 @@ def train(args):
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch [{epoch + 1:2d}/{args.num_epochs:2d}] ............... {args.net_name} ...............')
         
-        train_loss, train_time = train_epoch(model_engine, epoch * steps_per_epoch, train_loader, lr_scheduler, loss_type)
+        train_loss, train_time = train_epoch(model_engine, epoch, steps_per_epoch, train_loader, lr_scheduler, loss_type)
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(model_engine, val_loader)
        
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
@@ -236,11 +237,10 @@ def train(args):
         best_val_loss = min(best_val_loss, val_loss)
 
         wandb.log({
-                "epoch": epoch + 1,
                 "train_loss": train_loss.item(),
                 "val_loss": val_loss.item(),
             },
-            step = (epoch + 1) * steps_per_epoch
+            step = (epoch + 1) * steps_per_epoch - 1
         )
 
         save_model(args, args.exp_dir, epoch + 1, model_engine.module, optimizer, best_val_loss, is_new_best)
