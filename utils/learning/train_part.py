@@ -153,10 +153,10 @@ def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_ne
             'lr_scheduler': lr_scheduler.state_dict(),
             'best_val_loss': best_val_loss,
         },
-        f = args.exp_dir / 'model.pt'
+        f = args.exp_dir / f"epoch-{epoch}-model.pt"
     )
     if is_new_best:
-        shutil.copyfile(args.exp_dir / 'model.pt', args.exp_dir / 'best_model.pt')
+        shutil.copyfile(args.exp_dir / f"epoch-{epoch}-model.pt", args.exp_dir / f'epoch-{epoch}-best_model.pt')
 
         # artifact = wandb.Artifact(name="best_model", type="model")
         # artifact.add_file(str(exp_dir / 'best_model.pt'))
