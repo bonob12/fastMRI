@@ -119,6 +119,11 @@ class FastmriSliceData(Dataset):
     def __len__(self):
         return len(self.kspace_examples)
     
+    def _get_frames_indices(self, data_slice, num_slices):
+        z_list = [min(max(i+data_slice, 0), num_slices-1)
+                  for i in range(self.start_adj, self.end_adj)]
+        return z_list
+    
     def __getitem__(self, i):
         if not self.forward:
             image_fname, _ = self.image_examples[i]
@@ -126,9 +131,15 @@ class FastmriSliceData(Dataset):
         if not self.forward and image_fname.name != kspace_fname.name:
             raise ValueError(f"Image file {image_fname.name} does not match kspace file {kspace_fname.name}")
 
+        input = []
         with h5py.File(kspace_fname, "r") as hf:
-            input = hf[self.input_key][dataslice]
+            num_slices = hf[self.input_key].shape[0]
+            slice_idx_list = self._get_frames_indices(dataslice, num_slices)
+            for slice_idx in slice_idx_list:
+                input.append(hf["kspace"][slice_idx])
+            input = np.concatenate(input, axis=0)
             mask =  np.array(hf["mask"])
+            
         if self.forward:
             target = -1
             attrs = -1
