@@ -83,7 +83,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False):
         transform=DataTransform(isforward, max_key_),
         input_key=args.input_key,
         target_key=target_key_,
-        forward = isforward
+        forward=isforward
     )
 
     worker_init = partial(worker_init_fn, seed=args.seed)

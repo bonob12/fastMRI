@@ -13,6 +13,7 @@ import copy
 import deepspeed
 import wandb
 import importlib
+import cv2 
 
 from torchinfo import summary
 from tqdm import tqdm
@@ -39,14 +40,33 @@ def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler,
 
     with tqdm(total=len_loader, desc=f"{'Train':<6}", ncols=120) as pbar:
         for iter, data in enumerate(data_loader):
-            mask, kspace, target, maximum, _, _ = data
+            mask, kspace, target, maximum, fnames, _ = data
             mask = mask.cuda(non_blocking=True)
             kspace = kspace.cuda(non_blocking=True)
             target = target.cuda(non_blocking=True)
             maximum = maximum.cuda(non_blocking=True)
-
             output = model_engine(kspace, mask)
-            loss = loss_type(output, target, maximum)
+
+            binary_masks = []
+
+            for i in range(output.shape[0]):
+                target_np = target[i].cpu().numpy()
+
+                binary_mask = np.zeros(target_np.shape)
+                if 'knee' in str(fnames[i]):
+                    binary_mask[target_np>2e-5] = 1
+                elif 'brain' in str(fnames[i]):
+                    binary_mask[target_np>5e-5] = 1
+                
+                kernel = np.ones((3, 3), np.uint8)
+                binary_mask = cv2.erode(binary_mask, kernel, iterations=1)
+                binary_mask = cv2.dilate(binary_mask, kernel, iterations=15)
+                binary_mask = cv2.erode(binary_mask, kernel, iterations=14)  
+                binary_mask = (torch.from_numpy(binary_mask).to(device=output.device)).type(torch.float)
+                binary_masks.append(binary_mask)
+            
+            binary_masks = torch.stack(binary_masks).to(device=output.device)
+            loss = loss_type(output*binary_masks, target*binary_masks, maximum)
             model_engine.backward(loss)
             model_engine.step()
 
@@ -68,24 +88,48 @@ def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler,
     return total_loss / len_loader, time.perf_counter() - start_epoch
 
 
-def validate(model_engine, data_loader):
+def validate(model_engine, data_loader, loss_type):
     model_engine.eval()
     reconstructions = defaultdict(dict)
     targets = defaultdict(dict)
     start = time.perf_counter()
     len_loader = len(data_loader)
+    total_loss = 0.
 
     with torch.no_grad():
         with tqdm(total=len_loader, desc=f"{'Val':<6}", ncols=120) as pbar:
             for iter, data in enumerate(data_loader):
-                mask, kspace, target, _, fnames, slices = data
-                kspace = kspace.cuda(non_blocking=True)
+                mask, kspace, target, maximum, fnames, slices = data
                 mask = mask.cuda(non_blocking=True)
+                kspace = kspace.cuda(non_blocking=True)
+                target = target.cuda(non_blocking=True)
+                maximum = maximum.cuda(non_blocking=True)
                 output = model_engine(kspace, mask)
 
+                binary_masks = []
+
                 for i in range(output.shape[0]):
+                    target_np = target[i].cpu().numpy()
+
+                    binary_mask = np.zeros(target_np.shape)
+                    if 'knee' in str(fnames[i]):
+                        binary_mask[target_np>2e-5] = 1
+                    elif 'brain' in str(fnames[i]):
+                        binary_mask[target_np>5e-5] = 1
+                    
+                    kernel = np.ones((3, 3), np.uint8)
+                    binary_mask = cv2.erode(binary_mask, kernel, iterations=1)
+                    binary_mask = cv2.dilate(binary_mask, kernel, iterations=15)
+                    binary_mask = cv2.erode(binary_mask, kernel, iterations=14)  
+                    binary_mask = (torch.from_numpy(binary_mask).to(device=output.device)).type(torch.float)
+                    binary_masks.append(binary_mask)
+
                     reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
-                    targets[fnames[i]][int(slices[i])] = target[i].numpy()
+                    targets[fnames[i]][int(slices[i])] = target[i].cpu().numpy()
+        
+                binary_masks = torch.stack(binary_masks).to(device=output.device)
+                loss = loss_type(output*binary_masks, target*binary_masks, maximum)
+                total_loss += loss.item()
                 pbar.update(1)
 
     for fname in reconstructions:
@@ -96,9 +140,7 @@ def validate(model_engine, data_loader):
         targets[fname] = np.stack(
             [out for _, out in sorted(targets[fname].items())]
         )
-    metric_loss = sum([ssim_loss(targets[fname], reconstructions[fname]) for fname in reconstructions])
-    num_subjects = len(reconstructions)
-    return metric_loss, num_subjects, reconstructions, targets, None, time.perf_counter() - start
+    return total_loss / len_loader, reconstructions, targets, None, time.perf_counter() - start
 
 
 def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_new_best):
@@ -165,7 +207,7 @@ def train(args):
         saved_args.val_dir = args.val_dir
         saved_args.val_loss_dir = args.val_loss_dir
         saved_args.restart_from_checkpoint = args.restart_from_checkpoint
-        saved_args.restart_from_checkpoint = args.continue_lr_scheduler
+        saved_args.continue_lr_scheduler = args.continue_lr_scheduler
         if not args.continue_lr_scheduler:
             saved_args.lr = args.lr
             saved_args.num_epochs = args.num_epochs
@@ -292,23 +334,17 @@ def train(args):
         print(f'Epoch [{epoch + 1:2d}/{start_epoch + args.num_epochs:2d}] ............... {args.net_name} ...............')
         
         train_loss, train_time = train_epoch(model_engine, epoch, steps_per_epoch, train_loader, lr_scheduler, loss_type)
-        val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(model_engine, val_loader)
+        val_loss, reconstructions, targets, inputs, val_time = validate(model_engine, val_loader, loss_type)
        
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
         np.save(os.path.join(args.val_loss_dir, "val_loss_log"), val_loss_log)
-
-        train_loss = torch.tensor(train_loss)
-        val_loss = torch.tensor(val_loss)
-        num_subjects = torch.tensor(num_subjects)
-
-        val_loss = val_loss / num_subjects
 
         is_new_best = val_loss < best_val_loss
         best_val_loss = min(best_val_loss, val_loss)
 
         wandb.log({
-                "train_loss": train_loss.item(),
-                "val_loss": val_loss.item(),
+                "train_loss": train_loss,
+                "val_loss": val_loss,
             },
             step = (epoch + 1) * steps_per_epoch - 1
         )

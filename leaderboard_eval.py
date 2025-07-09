@@ -46,33 +46,25 @@ class SSIM(SSIMLoss):
 def forward(args):
 
     device = torch.device(f'cuda:0' if torch.cuda.is_available() else 'cpu')
-    torch.cuda.set_device(0)
-    
-    leaderboard_data = glob.glob(os.path.join(args.leaderboard_data_path,'*.h5'))
-    if len(leaderboard_data) != 58:
-        raise  NotImplementedError('Leaderboard Data Size Should Be 58')
-    
-    your_data = glob.glob(os.path.join(args.your_data_path,'*.h5'))
-    if len(your_data) != 58:
-        raise  NotImplementedError('Your Data Size Should Be 58')           
+    torch.cuda.set_device(0)       
     
     ssim_total = 0
     idx = 0
     ssim_calculator = SSIM().to(device=device)
     with torch.no_grad():
-        for part in ['brain_test', 'knee_test']:
+        for part in ['brain', 'knee']:
             for i_subject in range(29):
-                l_fname = os.path.join(args.leaderboard_data_path, part + str(i_subject+1) + '.h5')
-                y_fname = os.path.join(args.your_data_path, part + str(i_subject+1) + '.h5')
+                l_fname = os.path.join(args.leaderboard_data_path, f"{part}_test{i_subject+1}.h5")
+                y_fname = os.path.join(args.your_data_path, f"{part}_{args.acc}_test{i_subject+1}.h5")
                 with h5py.File(l_fname, "r") as hf:
                     num_slices = hf['image_label'].shape[0]
                 for i_slice in range(num_slices):
                     with h5py.File(l_fname, "r") as hf:
                         target = hf['image_label'][i_slice]
                         mask = np.zeros(target.shape)
-                        if part == 'knee_test':
+                        if 'knee' in part:
                             mask[target>2e-5] = 1
-                        elif part == 'brain_test':
+                        elif 'brain' in part:
                             mask[target>5e-5] = 1
                         kernel = np.ones((3, 3), np.uint8)
                         mask = cv2.erode(mask, kernel, iterations=1)
@@ -119,12 +111,14 @@ if __name__ == '__main__':
     
     # acc4
     args.leaderboard_data_path = args.path_leaderboard_data / "acc4" / 'image'
-    args.your_data_path = args.path_your_data / "acc4"
+    args.your_data_path = args.path_your_data
+    args.acc = Path("acc4")
     SSIM_acc4 = forward(args)
     
     # acc8
     args.leaderboard_data_path = args.path_leaderboard_data / "acc8" / 'image'
-    args.your_data_path = args.path_your_data / "acc8"
+    args.your_data_path = args.path_your_data
+    args.acc = Path("acc8")
     SSIM_acc8 = forward(args)
     
     print("Leaderboard SSIM : {:.4f}".format((SSIM_acc4 + SSIM_acc8) / 2))
