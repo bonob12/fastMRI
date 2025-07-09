@@ -17,5 +17,6 @@ python train.py \
 --target_key image_label \
 --max_key max \
 --seed 430 \
+# --volume_sample_rate 0.3 \
 # --restart_from_checkpoint ../result/test_varnet/checkpoints/0707_203020-tz597zye/best_model.pt \
-# --continue_lr_scheduler True
+# --continue_lr_scheduler True \

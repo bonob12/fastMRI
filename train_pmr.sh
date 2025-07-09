@@ -33,5 +33,6 @@ python train.py \
 --target_key image_label \
 --max_key max \
 --seed 430 \
+# --volume_sample_rate 0.3 \
 # --restart_from_checkpoint ../result/test_promptmr/checkpoints/0707_165655-9zbeok11/best_model.pt \
-# --continue_lr_scheduler True
+# --continue_lr_scheduler True \
