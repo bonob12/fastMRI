@@ -21,7 +21,6 @@ from collections import defaultdict
 from utils.data.load_data import create_data_loaders
 from utils.common.utils import save_reconstructions, ssim_loss
 from utils.common.loss_function import SSIMLoss
-from utils.model.varnet import VarNet
 
 def resolve_class(class_path: str):
     try:
@@ -32,7 +31,7 @@ def resolve_class(class_path: str):
         raise ImportError(f"Could not resolve class '{class_path}'. Error: {e}")
 
 
-def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler, loss_type):
+def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler, loss_type, slicedata):
     model_engine.train()
     start_epoch = time.perf_counter()
     len_loader = len(data_loader)
@@ -40,66 +39,8 @@ def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler,
 
     with tqdm(total=len_loader, desc=f"{'Train':<6}", ncols=120) as pbar:
         for iter, data in enumerate(data_loader):
-            mask, kspace, target, maximum, fnames, _ = data
-            mask = mask.cuda(non_blocking=True)
-            kspace = kspace.cuda(non_blocking=True)
-            target = target.cuda(non_blocking=True)
-            maximum = maximum.cuda(non_blocking=True)
-            output = model_engine(kspace, mask)
-
-            binary_masks = []
-
-            for i in range(output.shape[0]):
-                target_np = target[i].cpu().numpy()
-
-                binary_mask = np.zeros(target_np.shape)
-                if 'knee' in str(fnames[i]):
-                    binary_mask[target_np>2e-5] = 1
-                elif 'brain' in str(fnames[i]):
-                    binary_mask[target_np>5e-5] = 1
-                
-                kernel = np.ones((3, 3), np.uint8)
-                binary_mask = cv2.erode(binary_mask, kernel, iterations=1)
-                binary_mask = cv2.dilate(binary_mask, kernel, iterations=15)
-                binary_mask = cv2.erode(binary_mask, kernel, iterations=14)  
-                binary_mask = (torch.from_numpy(binary_mask).to(device=output.device)).type(torch.float)
-                binary_masks.append(binary_mask)
-            
-            binary_masks = torch.stack(binary_masks).to(device=output.device)
-            loss = loss_type(output*binary_masks, target*binary_masks, maximum)
-            model_engine.backward(loss)
-            model_engine.step()
-
-            total_loss += loss.item()
-            pbar.update(1)
-            
-            if iter % 10 == 0:
-                pbar.set_postfix(loss=f"{loss.item():.4g}")
-
-            if iter % 50 == 0:
-                wandb.log({
-                        "epoch": epoch + 1,
-                        "loss": loss.item(),
-                        "lr": lr_scheduler.get_last_lr()[0],
-                    },
-                    step = epoch * steps_per_epoch + iter
-                )
-
-    return total_loss / len_loader, time.perf_counter() - start_epoch
-
-
-def validate(model_engine, data_loader, loss_type):
-    model_engine.eval()
-    reconstructions = defaultdict(dict)
-    targets = defaultdict(dict)
-    start = time.perf_counter()
-    len_loader = len(data_loader)
-    total_loss = 0.
-
-    with torch.no_grad():
-        with tqdm(total=len_loader, desc=f"{'Val':<6}", ncols=120) as pbar:
-            for iter, data in enumerate(data_loader):
-                mask, kspace, target, maximum, fnames, slices = data
+            if slicedata == 'FastmriSliceData':
+                mask, kspace, target, maximum, fnames, _ = data
                 mask = mask.cuda(non_blocking=True)
                 kspace = kspace.cuda(non_blocking=True)
                 target = target.cuda(non_blocking=True)
@@ -123,24 +64,112 @@ def validate(model_engine, data_loader, loss_type):
                     binary_mask = cv2.erode(binary_mask, kernel, iterations=14)  
                     binary_mask = (torch.from_numpy(binary_mask).to(device=output.device)).type(torch.float)
                     binary_masks.append(binary_mask)
-
-                    reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
-                    targets[fnames[i]][int(slices[i])] = target[i].cpu().numpy()
-        
+                
                 binary_masks = torch.stack(binary_masks).to(device=output.device)
                 loss = loss_type(output*binary_masks, target*binary_masks, maximum)
+            else:
+                image, target = data
+                image = image.cuda(non_blocking=True)
+                target = target.cuda(non_blocking=True)
+
+                image = image.squeeze(0)
+                image = image.unsqueeze(1)
+                output = model_engine(image)
+                loss = loss_type(output, target)
+            
+            model_engine.backward(loss)
+            model_engine.step()
+
+            total_loss += loss.item()
+            pbar.update(1)
+            
+            if iter % 10 == 0:
+                pbar.set_postfix(loss=f"{loss.item():.4g}")
+
+            if iter % 50 == 0:
+                wandb.log({
+                        "epoch": epoch + 1,
+                        "loss": loss.item(),
+                        "lr": lr_scheduler.get_last_lr()[0],
+                    },
+                    step = epoch * steps_per_epoch + iter
+                )
+
+    return total_loss / len_loader, time.perf_counter() - start_epoch
+
+
+def validate(model_engine, data_loader, loss_type, slicedata):
+    model_engine.eval()
+    reconstructions = defaultdict(dict)
+    targets = defaultdict(dict)
+    start = time.perf_counter()
+    len_loader = len(data_loader)
+    total_loss = 0.
+    incorret = 0
+
+    with torch.no_grad():
+        with tqdm(total=len_loader, desc=f"{'Val':<6}", ncols=120) as pbar:
+            for iter, data in enumerate(data_loader):
+                if slicedata == 'FastmriSliceData':
+                    mask, kspace, target, maximum, fnames, slices = data
+                    mask = mask.cuda(non_blocking=True)
+                    kspace = kspace.cuda(non_blocking=True)
+                    target = target.cuda(non_blocking=True)
+                    maximum = maximum.cuda(non_blocking=True)
+                    output = model_engine(kspace, mask)
+
+                    binary_masks = []
+
+                    for i in range(output.shape[0]):
+                        target_np = target[i].cpu().numpy()
+
+                        binary_mask = np.zeros(target_np.shape)
+                        if 'knee' in str(fnames[i]):
+                            binary_mask[target_np>2e-5] = 1
+                        elif 'brain' in str(fnames[i]):
+                            binary_mask[target_np>5e-5] = 1
+                        
+                        kernel = np.ones((3, 3), np.uint8)
+                        binary_mask = cv2.erode(binary_mask, kernel, iterations=1)
+                        binary_mask = cv2.dilate(binary_mask, kernel, iterations=15)
+                        binary_mask = cv2.erode(binary_mask, kernel, iterations=14)  
+                        binary_mask = (torch.from_numpy(binary_mask).to(device=output.device)).type(torch.float)
+                        binary_masks.append(binary_mask)
+
+                        reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
+                        targets[fnames[i]][int(slices[i])] = target[i].cpu().numpy()
+            
+                    binary_masks = torch.stack(binary_masks).to(device=output.device)
+                    loss = loss_type(output*binary_masks, target*binary_masks, maximum)
+                else:
+                    image, target = data
+                    image = image.cuda(non_blocking=True)
+                    target = target.cuda(non_blocking=True)
+
+                    image = image.squeeze(0)
+                    image = image.unsqueeze(1)
+                    output = model_engine(image)
+                    loss = loss_type(output, target)
+
+                    pred = torch.argmax(output, dim=1)
+                    if pred != target:
+                        incorret += 1
+
                 total_loss += loss.item()
                 pbar.update(1)
-
-    for fname in reconstructions:
-        reconstructions[fname] = np.stack(
-            [out for _, out in sorted(reconstructions[fname].items())]
-        )
-    for fname in targets:
-        targets[fname] = np.stack(
-            [out for _, out in sorted(targets[fname].items())]
-        )
-    return total_loss / len_loader, reconstructions, targets, None, time.perf_counter() - start
+    
+    if slicedata == 'FastmriSliceData':
+        for fname in reconstructions:
+            reconstructions[fname] = np.stack(
+                [out for _, out in sorted(reconstructions[fname].items())]
+            )
+        for fname in targets:
+            targets[fname] = np.stack(
+                [out for _, out in sorted(targets[fname].items())]
+            )
+        return total_loss / len_loader, reconstructions, targets, time.perf_counter() - start
+    else:
+        return total_loss / len_loader, 1 - incorret / len_loader, time.perf_counter() - start
 
 
 def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_new_best):
@@ -215,7 +244,7 @@ def train(args):
 
     ModelClass = resolve_class(args.model_name)
 
-    if args.model_name.endswith("VarNet"):
+    if args.model_name.endswith('VarNet'):
         model = ModelClass(
             num_cascades=args.cascade, 
             chans=args.chans, 
@@ -223,7 +252,9 @@ def train(args):
             sens_chans=args.sens_chans,
             sens_pools=args.sens_pools,
         )
-    elif args.model_name.endswith("PromptMR"):
+        loss_type = SSIMLoss().to(device=device)
+        slicedata = 'FastmriSliceData'
+    elif args.model_name.endswith('PromptMR'):
         model = ModelClass(
             num_cascades=args.num_cascades,
             num_adj_slices=args.num_adj_slices,
@@ -247,6 +278,12 @@ def train(args):
             use_sens_adj=args.use_sens_adj,
             compute_sens_per_coil=args.compute_sens_per_coil,
         )
+        loss_type = SSIMLoss().to(device=device)
+        slicedata = 'FastmriSliceData'
+    elif args.model_name.endswith('CNN'):
+        model = ModelClass()
+        loss_type = nn.CrossEntropyLoss().to(device=device)
+        slicedata = 'CNNSliceData'
     else:
         raise ValueError("No matching model")
 
@@ -280,8 +317,8 @@ def train(args):
         "wall_clock_breakdown": False,
     }
 
-    train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True, data_type='train')
-    val_loader = create_data_loaders(data_path = args.data_path_val, args = args, data_type='val')
+    train_loader = create_data_loaders(data_path=args.data_path_train, args=args, shuffle=True, data_type='train', slicedata=slicedata)
+    val_loader = create_data_loaders(data_path=args.data_path_val, args=args, data_type='val', slicedata=slicedata)
 
     sample = next(iter(train_loader))
     kspace = sample[1]
@@ -325,40 +362,53 @@ def train(args):
             print("New lr_scheduler applied")
     else:
         start_epoch = 0
-        best_val_loss = 1.
-
-    loss_type = SSIMLoss().to(device=device)
+        best_val_loss = float('inf')
     
     val_loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
         print(f'Epoch [{epoch + 1:2d}/{start_epoch + args.num_epochs:2d}] ............... {args.net_name} ...............')
         
-        train_loss, train_time = train_epoch(model_engine, epoch, steps_per_epoch, train_loader, lr_scheduler, loss_type)
-        val_loss, reconstructions, targets, inputs, val_time = validate(model_engine, val_loader, loss_type)
-       
+        train_loss, train_time = train_epoch(model_engine, epoch, steps_per_epoch, train_loader, lr_scheduler, loss_type, slicedata)
+        
+        if slicedata == 'FastmriSliceData':
+            val_loss, reconstructions, targets, val_time = validate(model_engine, val_loader, loss_type, slicedata)
+        else:
+            val_loss, accuracy, val_time = validate(model_engine, val_loader, loss_type, slicedata)
+
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
         np.save(os.path.join(args.val_loss_dir, "val_loss_log"), val_loss_log)
 
         is_new_best = val_loss < best_val_loss
         best_val_loss = min(best_val_loss, val_loss)
 
-        wandb.log({
-                "train_loss": train_loss,
-                "val_loss": val_loss,
-            },
-            step = (epoch + 1) * steps_per_epoch - 1
-        )
-
         save_model(args, epoch + 1, model_engine.module, optimizer, lr_scheduler, best_val_loss, is_new_best)
         print(f"{'TrainLoss':<10}: {train_loss:9.4g}   {'ValLoss':<8}: {val_loss:8.4g}")
         print(f"{'TrainTime':<10}: {train_time:8.2f}s   {'ValTime':<8}: {val_time:7.2f}s")
 
+        if slicedata != 'FastmriSliceData':
+            print(f"{'Accuracy':<10}: {accuracy:9.4g}")
+            wandb.log({
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
+                    "val_accuracy": accuracy,
+                },
+                step = (epoch + 1) * steps_per_epoch - 1
+            )
+        else:
+            wandb.log({
+                    "train_loss": train_loss,
+                    "val_loss": val_loss,
+                },
+                step = (epoch + 1) * steps_per_epoch - 1
+            )
+
         if is_new_best:
             print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-            start = time.perf_counter()
-            save_reconstructions(reconstructions, args.val_dir, targets=targets, inputs=inputs)
-            print(
-                f'ForwardTime = {time.perf_counter() - start:.4f}s',
-            )
+            if slicedata == 'FastmriSliceData':
+                start = time.perf_counter()
+                save_reconstructions(reconstructions, args.val_dir, targets=targets, inputs=None)
+                print(
+                    f'ForwardTime = {time.perf_counter() - start:.4f}s',
+                )
 
     wandb.finish()

@@ -271,6 +271,7 @@ class FastmriDataTransform:
                 target = rss(complex_abs(image), dim=1)
             kspace = fft2c(image)
             mask = self.mask_func(kspace.shape)
+            kspace = kspace * mask + 0.0
         else:
             if 384 < kspace.shape[-3]:
                 image = ifft2c(kspace)
@@ -282,6 +283,5 @@ class FastmriDataTransform:
             mask_shape[-2] = kspace.shape[-2]
             mask = torch.from_numpy(mask.reshape(*mask_shape).astype(np.float32))
         
-        kspace = kspace * mask + 0.0
         mask = mask.to(torch.uint8)
         return mask, kspace, target, maximum, fname, slice_idx

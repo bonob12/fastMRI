@@ -16,6 +16,34 @@ def worker_init_fn(worker_id, seed):
     random.seed(seed + worker_id)
     torch.manual_seed(seed + worker_id)
 
+class CNNSliceData(Dataset):
+    def __init__(self, root: Path):
+        self.image_examples = []
+
+        image_files = list(Path(root/"brain/image").iterdir())
+        for fname in sorted(image_files):
+            self.image_examples += [fname]
+        image_files = list(Path(root/"knee/image").iterdir())
+        for fname in sorted(image_files):
+            self.image_examples += [fname]
+        
+    def __len__(self):
+        return len(self.image_examples)
+    
+    def __getitem__(self, i):
+        image_fname = self.image_examples[i]
+        
+        image = []
+        with h5py.File(image_fname, "r") as hf:
+            num_slices = hf['image_grappa'].shape[0]
+            for slice_idx in range(num_slices):
+                image.append(hf['image_grappa'][slice_idx])
+            image = np.stack(image, axis=0)
+        if 'brain' in image_fname.name:
+            target = 0
+        elif 'knee' in image_fname.name:
+            target = 1
+        return torch.tensor(image, dtype=torch.float32), torch.tensor(target, dtype=torch.long)
 
 class FastmriSliceData(Dataset):
     def __init__(
@@ -154,30 +182,33 @@ class FastmriSliceData(Dataset):
         return self.transform(mask, input, target, attrs, kspace_fname.name, dataslice)
 
 
-def create_data_loaders(data_path, args, shuffle=False, data_type='train'):
-    if data_type != 'test':
-        max_key_ = args.max_key
-        target_key_ = args.target_key
-    else:
-        max_key_ = None
-        target_key_ = None
-    data_storage = FastmriSliceData(
-        root=data_path/args.task,
-        transform=FastmriDataTransform(
+def create_data_loaders(data_path, args, shuffle=False, data_type='train', slicedata='FastmriSliceData'):
+    if slicedata == 'FastmriSliceData':
+        if data_type != 'test':
+            max_key_ = args.max_key
+            target_key_ = args.target_key
+        else:
+            max_key_ = None
+            target_key_ = None
+        data_storage = FastmriSliceData(
+            root=data_path/args.task,
+            transform=FastmriDataTransform(
+                data_type=data_type,
+                max_key=max_key_,
+                aug_start_epoch=0,
+                aug_gamma=0.1,
+                acceleration=args.acceleration,
+                task=args.task,
+            ),
+            use_dataset_cache=(args.volume_sample_rate==1.0),
+            volume_sample_rate=args.volume_sample_rate,
+            num_adj_slices=args.num_adj_slices if hasattr(args, 'num_adj_slices') else 1,
+            input_key=args.input_key,
+            target_key=target_key_,
             data_type=data_type,
-            max_key=max_key_,
-            aug_start_epoch=0,
-            aug_gamma=0.1,
-            acceleration=args.acceleration,
-            task=args.task,
-        ),
-        use_dataset_cache=(args.volume_sample_rate==1.0),
-        volume_sample_rate=args.volume_sample_rate,
-        num_adj_slices=args.num_adj_slices if hasattr(args, 'num_adj_slices') else 1,
-        input_key=args.input_key,
-        target_key=target_key_,
-        data_type=data_type,
-    )
+        )
+    elif slicedata == 'CNNSliceData':
+        data_storage = CNNSliceData(root=data_path)
 
     worker_init = partial(worker_init_fn, seed=args.seed)
     g = torch.Generator()

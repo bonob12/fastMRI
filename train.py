@@ -42,25 +42,25 @@ if __name__ == '__main__':
     parser.add_argument('--data_path_train', type=Path, default='../Data/train/')
     parser.add_argument('--data_path_val', type=Path, default='../Data/val/')
     parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--input_key', type=str, default='kspace')
-    parser.add_argument('--target_key', type=str, default='image_label')
-    parser.add_argument('--max_key', type=str, default='max')
     parser.add_argument('--seed', type=int, default=430)
     parser.add_argument('--restart_from_checkpoint', type=Path, default=None)
     parser.add_argument('--continue_lr_scheduler', type=str_to_bool, default=True)
-    parser.add_argument('--volume_sample_rate', type=float, default=1.0)
-    parser.add_argument('--acceleration', type=int, default=4)
-    parser.add_argument('--task', type=str, default='brain')
 
     args, _ = parser.parse_known_args()
 
-    if args.model_name.endswith("VarNet"):
+    if args.model_name.endswith('VarNet'):
         parser.add_argument('--cascade', type=int, default=1)
         parser.add_argument('--chans', type=int, default=9)
         parser.add_argument('--sens_chans', type=int, default=4)
         parser.add_argument('--pools', type=int, default=4)
         parser.add_argument('--sens_pools', type=int, default=4)
-    elif args.model_name.endswith("PromptMR"):
+        parser.add_argument('--input_key', type=str, default='kspace')
+        parser.add_argument('--target_key', type=str, default='image_label')
+        parser.add_argument('--max_key', type=str, default='max')
+        parser.add_argument('--volume_sample_rate', type=float, default=1.0)
+        parser.add_argument('--acceleration', type=int, default=4)
+        parser.add_argument('--task', type=str, default='brain')
+    elif args.model_name.endswith('PromptMR'):
         parser.add_argument('--num_cascades', type=int, default=1)
         parser.add_argument('--num_adj_slices', type=int, default=1)
         parser.add_argument('--n_feat0', type=int, default=12)
@@ -82,6 +82,14 @@ if __name__ == '__main__':
         parser.add_argument('--adaptive_input', type=str_to_bool, default=False)
         parser.add_argument('--use_sens_adj', type=str_to_bool, default=False)
         parser.add_argument('--compute_sens_per_coil', type=str_to_bool, default=False)
+        parser.add_argument('--input_key', type=str, default='kspace')
+        parser.add_argument('--target_key', type=str, default='image_label')
+        parser.add_argument('--max_key', type=str, default='max')
+        parser.add_argument('--volume_sample_rate', type=float, default=1.0)
+        parser.add_argument('--acceleration', type=int, default=4)
+        parser.add_argument('--task', type=str, default='brain')
+    elif args.model_name.endswith('CNN'):
+        pass
     else:
         raise ValueError(f"Unsupported model: {args.model_name}")
 
