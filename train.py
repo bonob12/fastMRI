@@ -49,6 +49,8 @@ if __name__ == '__main__':
     parser.add_argument('--restart_from_checkpoint', type=Path, default=None)
     parser.add_argument('--continue_lr_scheduler', type=str_to_bool, default=True)
     parser.add_argument('--volume_sample_rate', type=float, default=1.0)
+    parser.add_argument('--acceleration', type=int, default=4)
+    parser.add_argument('--task', type=str, default='brain')
 
     args, _ = parser.parse_known_args()
 

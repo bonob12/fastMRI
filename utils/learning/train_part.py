@@ -280,8 +280,8 @@ def train(args):
         "wall_clock_breakdown": False,
     }
 
-    train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
-    val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
+    train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True, data_type='train')
+    val_loader = create_data_loaders(data_path = args.data_path_val, args = args, data_type='val')
 
     sample = next(iter(train_loader))
     kspace = sample[1]

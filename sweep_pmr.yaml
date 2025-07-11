@@ -80,3 +80,7 @@ parameters:
     value: max
   seed:
     value: 430
+  acceleration:
+    value: 4
+  task:
+    value: brain

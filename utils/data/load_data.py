@@ -29,20 +29,20 @@ class FastmriSliceData(Dataset):
         num_adj_slices: int = 1,
         input_key: str = "kspace",
         target_key: str = "image_label",
-        forward: bool = False,
+        data_type: str = 'train',
     ):
         
         assert num_adj_slices % 2 == 1, "Number of adjacent slices must be odd in SliceDataset"
         self.num_adj_slices = num_adj_slices
         self.start_adj, self.end_adj = -(self.num_adj_slices//2), self.num_adj_slices//2+1
 
-        self.image_cache_file = image_cache_file
-        self.kspace_cache_file = kspace_cache_file
-
+        self.image_cache_file = root / image_cache_file
+        self.kspace_cache_file = root / kspace_cache_file
         self.transform = transform
         self.input_key = input_key
         self.target_key = target_key
-        self.forward = forward
+        self.data_type = data_type
+
         self.image_examples = []
         self.kspace_examples = []
 
@@ -62,7 +62,7 @@ class FastmriSliceData(Dataset):
             kspace_cache = {}
 
         if image_cache.get(root) is None or not use_dataset_cache:
-            if not forward:
+            if data_type != 'test':
                 image_files = list(Path(root / "image").iterdir())
                 for fname in sorted(image_files):
                     num_slices = self._get_metadata(fname)
@@ -70,10 +70,10 @@ class FastmriSliceData(Dataset):
                     self.image_examples += [
                         (fname, slice_ind) for slice_ind in range(num_slices)
                     ]
-            if image_cache.get(root) is None and use_dataset_cache:
-                image_cache[root] = self.image_examples
-                with open(self.image_cache_file, "wb") as cache_f:
-                    pickle.dump(image_cache, cache_f)
+                if image_cache.get(root) is None and use_dataset_cache:
+                    image_cache[root] = self.image_examples
+                    with open(self.image_cache_file, "wb") as cache_f:
+                        pickle.dump(image_cache, cache_f)
         else:
             self.image_examples = image_cache[root]
         
@@ -108,6 +108,9 @@ class FastmriSliceData(Dataset):
                 if image_example[0].stem in sampled_vols
             ]
 
+    def update_epoch(self, epoch):
+        self.transform.update_epoch(epoch)
+
     def _get_metadata(self, fname):
         with h5py.File(fname, "r") as hf:
             if self.input_key in hf.keys():
@@ -125,10 +128,10 @@ class FastmriSliceData(Dataset):
         return z_list
     
     def __getitem__(self, i):
-        if not self.forward:
+        if self.data_type != 'test':
             image_fname, _ = self.image_examples[i]
         kspace_fname, dataslice = self.kspace_examples[i]
-        if not self.forward and image_fname.name != kspace_fname.name:
+        if self.data_type != 'test' and image_fname.name != kspace_fname.name:
             raise ValueError(f"Image file {image_fname.name} does not match kspace file {kspace_fname.name}")
 
         input = []
@@ -140,9 +143,9 @@ class FastmriSliceData(Dataset):
             input = np.concatenate(input, axis=0)
             mask =  np.array(hf["mask"])
             
-        if self.forward:
-            target = -1
-            attrs = -1
+        if self.data_type == 'test':
+            target = None
+            attrs = None
         else:
             with h5py.File(image_fname, "r") as hf:
                 target = hf[self.target_key][dataslice]
@@ -151,24 +154,29 @@ class FastmriSliceData(Dataset):
         return self.transform(mask, input, target, attrs, kspace_fname.name, dataslice)
 
 
-def create_data_loaders(data_path, args, shuffle=False, isforward=False):
-    if isforward == False:
+def create_data_loaders(data_path, args, shuffle=False, data_type='train'):
+    if data_type != 'test':
         max_key_ = args.max_key
         target_key_ = args.target_key
     else:
-        max_key_ = -1
-        target_key_ = -1
+        max_key_ = None
+        target_key_ = None
     data_storage = FastmriSliceData(
-        root=data_path,
-        transform=FastmriDataTransform(isforward, max_key_),
+        root=data_path/args.task,
+        transform=FastmriDataTransform(
+            data_type=data_type,
+            max_key=max_key_,
+            aug_start_epoch=0,
+            aug_gamma=0.1,
+            acceleration=args.acceleration,
+            task=args.task,
+        ),
         use_dataset_cache=(args.volume_sample_rate==1.0),
-        image_cache_file=data_path/"image_cache.pkl",
-        kspace_cache_file=data_path/"kspace_cache.pkl",
         volume_sample_rate=args.volume_sample_rate,
         num_adj_slices=args.num_adj_slices if hasattr(args, 'num_adj_slices') else 1,
         input_key=args.input_key,
         target_key=target_key_,
-        forward=isforward
+        data_type=data_type,
     )
 
     worker_init = partial(worker_init_fn, seed=args.seed)
@@ -181,6 +189,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False):
         shuffle=shuffle,
         generator=g,
         num_workers=args.num_workers,
+        persistent_workers=True,
         pin_memory=True,
         worker_init_fn=worker_init,
     )
