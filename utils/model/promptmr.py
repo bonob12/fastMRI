@@ -606,14 +606,15 @@ class PromptMR(nn.Module):
         ])
 
     def forward(self, masked_kspace: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        sens_maps = self.sens_net(masked_kspace, mask, self.compute_sens_per_coil)
+
+        sens_maps = torch.utils.checkpoint.checkpoint(self.sens_net, masked_kspace, mask, self.compute_sens_per_coil, use_reentrant=False)
         img_zf = sens_reduce(masked_kspace, sens_maps, self.num_adj_slices)
         img_pred = img_zf.clone()
         latent = img_zf.clone()
         history_feat = None
 
         for cascade in self.cascades:
-            img_pred, latent, history_feat = cascade(img_pred, img_zf, latent, mask, sens_maps, history_feat)
+            img_pred, latent, history_feat = torch.utils.checkpoint.checkpoint(cascade, img_pred, img_zf, latent, mask, sens_maps, history_feat, use_reentrant=False)
 
         # get central slice of rss as final output
         result = torch.chunk(img_pred, self.num_adj_slices, dim=1)[self.center_slice]

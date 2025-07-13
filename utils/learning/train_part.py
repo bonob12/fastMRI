@@ -232,9 +232,6 @@ def train(args):
     if args.restart_from_checkpoint is not None:
         checkpoint = torch.load(args.restart_from_checkpoint, map_location=device, weights_only=False)
         saved_args = checkpoint['args']
-        saved_args.exp_dir = args.exp_dir
-        saved_args.val_dir = args.val_dir
-        saved_args.val_loss_dir = args.val_loss_dir
         saved_args.restart_from_checkpoint = args.restart_from_checkpoint
         saved_args.continue_lr_scheduler = args.continue_lr_scheduler
         if not args.continue_lr_scheduler:
@@ -308,7 +305,7 @@ def train(args):
         "activation_checkpointing": {
             "partition_activations": False,
             "contiguous_memory_optimization": False,
-            "cpu_checkpointing": False,
+            "cpu_checkpointing": True,
         },
         "compile_config": {
             "offload_activation": False,

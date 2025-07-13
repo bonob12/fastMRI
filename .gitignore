@@ -3,3 +3,5 @@ venv_*
 env
 __pycache__
 wandb/
+*.sh
+*.yaml
