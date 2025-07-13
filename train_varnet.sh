@@ -19,6 +19,6 @@ python train.py \
 --seed 430 \
 --acceleration 4 \
 --task brain \
-# --volume_sample_rate 0.3 \
+--volume_sample_rate 0.3 \
 # --restart_from_checkpoint ../result/test_varnet/checkpoints/0707_203020-tz597zye/best_model.pt \
 # --continue_lr_scheduler True \

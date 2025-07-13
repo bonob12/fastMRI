@@ -185,7 +185,7 @@ def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_ne
         f = args.exp_dir / f"epoch-{epoch}-model.pt"
     )
     if is_new_best:
-        shutil.copyfile(args.exp_dir / f"epoch-{epoch}-model.pt", args.exp_dir / f'epoch-{epoch}-best_model.pt')
+        shutil.copyfile(args.exp_dir / f"epoch-{epoch}-model.pt", args.exp_dir / f'best_model.pt')
 
         # artifact = wandb.Artifact(name=f'epoch-{epoch}-best_model', type="model")
         # artifact.add_file(str(args.exp_dir / f'epoch-{epoch}-best_model.pt'))
@@ -364,7 +364,7 @@ def train(args):
         start_epoch = 0
         best_val_loss = float('inf')
     
-    val_loss_log = np.empty((0, 2))
+    loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
         print(f'Epoch [{epoch + 1:2d}/{start_epoch + args.num_epochs:2d}] ............... {args.net_name} ...............')
         
@@ -375,8 +375,8 @@ def train(args):
         else:
             val_loss, accuracy, val_time = validate(model_engine, val_loader, loss_type, slicedata)
 
-        val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
-        np.save(os.path.join(args.val_loss_dir, "val_loss_log"), val_loss_log)
+        loss_log = np.append(loss_log, np.array([[epoch, train_loss]]), axis=0)
+        np.save(os.path.join(args.loss_log_dir, "loss_log"), loss_log)
 
         is_new_best = val_loss < best_val_loss
         best_val_loss = min(best_val_loss, val_loss)

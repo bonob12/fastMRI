@@ -11,3 +11,4 @@ wandb
 torchinfo
 deepspeed
 torchvision
+mpi4py

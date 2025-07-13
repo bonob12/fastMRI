@@ -112,10 +112,10 @@ if __name__ == '__main__':
 
     args.exp_dir = Path('../result') / args.net_name / 'checkpoints' / run_name
     args.val_dir = Path('../result') / args.net_name / 'reconstructions_val' / run_name
-    args.val_loss_dir = Path('../result') / args.net_name / 'val_loss_log' / run_name
+    args.loss_log_dir = Path('../result') / args.net_name / 'loss_log' / run_name
 
     args.exp_dir.mkdir(parents=True, exist_ok=True)
     args.val_dir.mkdir(parents=True, exist_ok=True)
-    args.val_loss_dir.mkdir(parents=True, exist_ok=True)
+    args.loss_log_dir.mkdir(parents=True, exist_ok=True)
 
     train(args)

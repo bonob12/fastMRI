@@ -2,39 +2,39 @@ python train.py \
 --batch_size 1 \
 --gradient_accumulation_steps 2 \
 --num_workers 4 \
---num_epochs 5 \
+--num_epochs 35 \
 --net_name test_promptmr \
 --model_name utils.model.promptmr.PromptMR \
 --data_path_train ../Data/train/ \
 --data_path_val ../Data/val/ \
 --lr 3e-4 \
---num_cascades 1 \
---num_adj_slices 1 \
---n_feat0 12 \
---feature_dim '16 20 24' \
---prompt_dim '4 8 12' \
---sens_n_feat0 4 \
---sens_feature_dim '6 8 10' \
---sens_prompt_dim '2 4 6' \
---len_prompt '2 2 2' \
+--num_cascades 6 \
+--num_adj_slices 3 \
+--n_feat0 24 \
+--feature_dim '36 48 60' \
+--prompt_dim '12 24 36' \
+--sens_n_feat0 6 \
+--sens_feature_dim '9 12 15' \
+--sens_prompt_dim '3 6 9' \
+--len_prompt '5 5 5' \
 --prompt_size '64 32 16' \
 --n_enc_cab '2 3 3' \
 --n_dec_cab '2 2 3' \
 --n_skip_cab '1 1 1' \
 --n_bottleneck_cab 3 \
---n_buffer 0 \
---n_history 0 \
---no_use_ca True \
+--n_buffer 4 \
+--n_history 3 \
+--no_use_ca False \
 --learnable_prompt False \
---adaptive_input False \
---use_sens_adj False \
---compute_sens_per_coil False \
+--adaptive_input True \
+--use_sens_adj True \
+--compute_sens_per_coil True \
 --input_key kspace \
 --target_key image_label \
 --max_key max \
 --seed 430 \
 --acceleration 4 \
 --task brain \
-# --volume_sample_rate 0.3 \
-# --restart_from_checkpoint ../result/test_promptmr/checkpoints/0707_165655-9zbeok11/best_model.pt \
-# --continue_lr_scheduler True \
+--restart_from_checkpoint ../result/test_promptmr/checkpoints/0712_101436-nyev6rvh/epoch-2-model.pt \
+--continue_lr_scheduler True \
+# --volume_sample_rate 0.1 \
