@@ -269,6 +269,7 @@ class FastmriDataTransform:
                 if auged: is_aug = True
             if is_aug:
                 target = rss(complex_abs(image), dim=1)
+                maximum = target.max().item()
             kspace = fft2c(image)
             mask = self.mask_func(kspace.shape)
             kspace = kspace * mask + 0.0
