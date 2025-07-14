@@ -15,7 +15,7 @@ def resolve_class(class_path: str):
     except (ImportError, AttributeError) as e:
         raise ImportError(f"Could not resolve class '{class_path}'. Error: {e}")
 
-def test(model, data_loader):
+def test(model, data_loader, num_adj_slices):
     model['cnn'].eval()
     for task in ['brain', 'knee']:
         for acc in ['acc4', 'acc8']:
@@ -35,8 +35,13 @@ def test(model, data_loader):
             task = ['brain', 'knee']
             task = task[torch.argmax(output, dim=1).item()]
 
-            for slice_idx in range(kspace.shape[1]):
-                sliced_kspace = kspace[:, slice_idx]
+            num_slices = kspace.shape[1]
+            start_adj, end_adj = -num_adj_slices[task][acc] // 2, num_adj_slices[task][acc] // 2 + 1
+            for slice_idx in range(num_slices):
+                sliced_kspace = []
+                for slice_adj_idx in [min(max(i+slice_idx, 0), num_slices-1) for i in range(start_adj, end_adj)]:
+                    sliced_kspace.append(kspace[:, slice_adj_idx])
+                sliced_kspace = torch.concatenate(sliced_kspace, dim=1)
                 output = model[task][accs[0]](sliced_kspace, mask)
                 reconstructions[fnames[0]][slice_idx] = output[0].cpu().numpy()
 
@@ -65,11 +70,13 @@ def forward(args):
     }
 
     model = defaultdict(dict)
+    num_adj_slices = defaultdict(dict)
     model['cnn'] = resolve_class(checkpoint['cnn']['args'].model_name)().to(device=device)
 
     for task in ['brain', 'knee']:
         for acc in ['acc4', 'acc8']:
             saved_args = checkpoint[task][acc]['args']
+            num_adj_slices[task][acc] = saved_args.num_adj_slices if hasattr(saved_args, 'num_adj_slices') else 1,
             model_name = saved_args.model_name
             ModelClass = resolve_class(model_name)
             if model_name.endswith('VarNet'):
@@ -115,5 +122,5 @@ def forward(args):
             model[task][acc].load_state_dict(checkpoint[task][acc]['model'])
     
     forward_loader = create_data_loaders(data_path=args.data_path, args=Namespace(seed=430), data_type='test', slicedata='TestSliceData')
-    reconstructions = test(model, forward_loader)
+    reconstructions = test(model, forward_loader, num_adj_slices)
     save_reconstructions(reconstructions, args.forward_dir, inputs=None)
