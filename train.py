@@ -4,11 +4,9 @@ from pathlib import Path
 
 if os.getcwd() + '/utils/model/' not in sys.path:
     sys.path.insert(1, os.getcwd() + '/utils/model/')
-from utils.learning.train_part import train
-
 if os.getcwd() + '/utils/common/' not in sys.path:
     sys.path.insert(1, os.getcwd() + '/utils/common/')
-from utils.common.utils import seed_fix
+from utils.learning.train_part import train
 
 def str_to_bool(v):
     if isinstance(v, bool):

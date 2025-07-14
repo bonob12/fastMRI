@@ -55,7 +55,7 @@ def forward(args):
         for part in ['brain', 'knee']:
             for i_subject in range(29):
                 l_fname = os.path.join(args.leaderboard_data_path, f"{part}_test{i_subject+1}.h5")
-                y_fname = os.path.join(args.your_data_path, f"{part}_{args.acc}_test{i_subject+1}.h5")
+                y_fname = os.path.join(args.your_data_path, f"{part}_test{i_subject+1}.h5")
                 with h5py.File(l_fname, "r") as hf:
                     num_slices = hf['image_label'].shape[0]
                 for i_slice in range(num_slices):
@@ -92,11 +92,7 @@ if __name__ == '__main__':
     For a fair comparison, Leaderboard Dataset Should Not Be Included When Training. This Is Of A Critical Issue.
     Since This Code Print SSIM To The 4th Decimal Point, You Can Use The Output Directly.
     """
-    parser = argparse.ArgumentParser(description=
-                                     'FastMRI challenge Leaderboard Image Evaluation',
-                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    
-    parser.add_argument('-g', '--GPU_NUM', type=int, default=0)
+    parser = argparse.ArgumentParser()
     parser.add_argument('-lp', '--path_leaderboard_data', type=Path, default='/Data/leaderboard/')
     
     """
@@ -111,14 +107,12 @@ if __name__ == '__main__':
     
     # acc4
     args.leaderboard_data_path = args.path_leaderboard_data / "acc4" / 'image'
-    args.your_data_path = args.path_your_data
-    args.acc = Path("acc4")
+    args.your_data_path = args.path_your_data / "acc4" 
     SSIM_acc4 = forward(args)
     
     # acc8
     args.leaderboard_data_path = args.path_leaderboard_data / "acc8" / 'image'
-    args.your_data_path = args.path_your_data
-    args.acc = Path("acc8")
+    args.your_data_path = args.path_your_data / "acc8" 
     SSIM_acc8 = forward(args)
     
     print("Leaderboard SSIM : {:.4f}".format((SSIM_acc4 + SSIM_acc8) / 2))

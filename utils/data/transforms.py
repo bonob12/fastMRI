@@ -18,7 +18,6 @@ def to_tensor(data):
 
     return torch.from_numpy(data.astype(np.float32))
 
-
 class CustomMaskFunc():
     def __init__(self, acceleration: int):
         self.acceleration = acceleration
@@ -36,13 +35,9 @@ class CustomMaskFunc():
         accel_samples = np.arange(offset, num_cols - 1, self.acceleration)
         accel_samples = np.around(accel_samples).astype(np.uint)
         mask[accel_samples] = True
-
-        mask_shape = [1 for _ in shape]
-        mask_shape[-2] = num_cols
-        mask = torch.from_numpy(mask.reshape(*mask_shape).astype(np.float32))
+        mask = to_tensor(mask.reshape(1, 1, num_cols, 1))
 
         return mask
-    
 
 class Aug_HorizontalFlip:
     def __init__(self, p_flip: float = 0.5):
@@ -52,7 +47,6 @@ class Aug_HorizontalFlip:
         if torch.rand(1).item() < self.p_flip:
             return torch.flip(x, dims=[-2]), True
         return x, False
-
 
 class Aug_RotateShiftShearScale:
     def __init__(self, p_rotate, p_shift, p_scale, p_shear, 
@@ -97,7 +91,6 @@ class Aug_RotateShiftShearScale:
         else:
             return x, False
 
-
 # class Aug_BiasField:
 #     def __init__(self, p_bias=0.2, strength=0.3):
 #         self.p_bias = p_bias
@@ -131,7 +124,6 @@ class Aug_RotateShiftShearScale:
 #             return torch.stack((real, imag), dim=-1), True
 #         return x, False
 
-
 class Aug_Contrast:
     def __init__(self, p_contrast, 
                  contrast_range=0.1):
@@ -157,7 +149,6 @@ class Aug_Contrast:
         else:
             return x, False
     
-
 class FastmriDataTransform:
     def __init__(
         self, 
@@ -169,46 +160,33 @@ class FastmriDataTransform:
         task: str = 'brain',
     ):
         self.data_type = data_type
-        self.max_key = max_key
-        self.epoch = 0
-        self.aug_start_epoch = aug_start_epoch
-        self.aug_gamma = aug_gamma
-        self.mask_func = CustomMaskFunc(acceleration)
+        if self.data_type != 'test':
+            self.max_key = max_key
+            self.epoch = 0
+            self.aug_start_epoch = aug_start_epoch
+            self.aug_gamma = aug_gamma
+            self.mask_func = CustomMaskFunc(acceleration)
 
-        if task == 'brain':
-            self.augmentations = [
-                Aug_RotateShiftShearScale(
-                    p_rotate=0.25, p_shift=0.5, p_scale=0.5, p_shear=0.5, 
-                    max_degree=5, max_shift_x=5, max_shift_y=5, scale_range=0.1, max_shear_x=5, max_shear_y=5
-                ),
-                Aug_Contrast(p_contrast=0.25, contrast_range=0.1),
-            ]
-        elif task == 'knee':
-            self.augmentations = [
-                Aug_HorizontalFlip(p_flip=0.5),
-                Aug_RotateShiftShearScale(
-                    p_rotate=0.25, p_shift=0.5, p_scale=0.5, p_shear=0.5, 
-                    max_degree=5, max_shift_x=5, max_shift_y=5, scale_range=0.1, max_shear_x=5, max_shear_y=5
-                ),
-                Aug_Contrast(p_contrast=0.25, contrast_range=0.1),
-            ]
+            if task == 'brain':
+                self.augmentations = [
+                    Aug_RotateShiftShearScale(
+                        p_rotate=0.25, p_shift=0.5, p_scale=0.5, p_shear=0.5, 
+                        max_degree=5, max_shift_x=5, max_shift_y=5, scale_range=0.1, max_shear_x=5, max_shear_y=5
+                    ),
+                    Aug_Contrast(p_contrast=0.25, contrast_range=0.1),
+                ]
+            elif task == 'knee':
+                self.augmentations = [
+                    Aug_HorizontalFlip(p_flip=0.5),
+                    Aug_RotateShiftShearScale(
+                        p_rotate=0.25, p_shift=0.5, p_scale=0.5, p_shear=0.5, 
+                        max_degree=5, max_shift_x=5, max_shift_y=5, scale_range=0.1, max_shear_x=5, max_shear_y=5
+                    ),
+                    Aug_Contrast(p_contrast=0.25, contrast_range=0.1),
+                ]
     
     def update_epoch(self, epoch):
         self.epoch = epoch
-
-    def _crop_and_pad_mask(self, mask):
-        length = len(mask)
-    
-        if length > 384:
-            start = (length - 384) // 2
-            mask = mask[start : start + 384]
-        elif length < 384:
-            pad_len = 384 - length
-            pad_left = pad_len // 2
-            pad_right = pad_len - pad_left
-            mask = np.pad(mask, (pad_left, pad_right), mode='constant', constant_values=0)
-            
-        return mask.astype(np.float32)
 
     def _crop_if_needed(self, image):
         w_from = h_from = 0
@@ -255,9 +233,6 @@ class FastmriDataTransform:
         if self.data_type != 'test':
             target = to_tensor(target)
             maximum = attrs[self.max_key]
-        else:
-            target = None
-            maximum = None
 
         kspace = to_tensor(input)
         if self.data_type == 'train':
@@ -280,9 +255,9 @@ class FastmriDataTransform:
                 h_to = h_from + 384
                 image = image[..., h_from:h_to, :, :]
                 kspace = fft2c(image)
-            mask_shape = [1 for _ in kspace.shape]
-            mask_shape[-2] = kspace.shape[-2]
-            mask = torch.from_numpy(mask.reshape(*mask_shape).astype(np.float32))
+            if self.data_type == 'test':
+                return kspace
+            mask = to_tensor(mask.reshape(1, 1, kspace.shape[-2], 1))
         
         mask = mask.to(torch.uint8)
         return mask, kspace, target, maximum, fname, slice_idx

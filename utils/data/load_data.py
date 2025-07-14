@@ -10,11 +10,65 @@ from pathlib import Path
 from functools import partial
 from typing import Callable, Optional
 
-
 def worker_init_fn(worker_id, seed):
     np.random.seed(seed + worker_id)
     random.seed(seed + worker_id)
     torch.manual_seed(seed + worker_id)
+
+def calculate_mask_acc(mask):
+    mask = mask.copy()
+    cent = mask.shape[0] // 2
+
+    left = np.argmin(np.flip(mask[:cent]))
+    right = np.argmin(mask[cent:])
+    num_low_freqs = left + right
+
+    pad = (mask.shape[0] - num_low_freqs + 1) // 2
+    mask[pad:pad + num_low_freqs] = 0
+
+    acc = (mask.shape[0] - num_low_freqs) / np.sum(mask)
+
+    return 'acc4' if abs(acc - 4) < abs(acc - 8) else 'acc8'
+
+class TestSliceData(Dataset):
+    def __init__(self, root: Path, transform: Optional[Callable] = None):
+        self.transform = transform
+        self.image_examples = []
+        self.kspace_examples = []
+
+        image_files = list(Path(root/"image").iterdir())
+        for fname in sorted(image_files):
+            self.image_examples += [fname]
+        kspace_files = list(Path(root/"kspace").iterdir())
+        for fname in sorted(kspace_files):
+            self.kspace_examples += [fname]
+        
+    def __len__(self):
+        return len(self.image_examples)
+    
+    def __getitem__(self, i):
+        image_fname = self.image_examples[i]
+        kspace_fname = self.kspace_examples[i]
+        if image_fname.name != kspace_fname.name:
+            raise ValueError(f"Image file {image_fname.name} does not match kspace file {kspace_fname.name}")
+        
+        with h5py.File(image_fname, "r") as hf:
+            image = np.array(hf['image_grappa'])
+            image = torch.from_numpy(image.astype(np.float32))
+        with h5py.File(kspace_fname, "r") as hf:
+            kspace = hf['kspace']
+            mask = np.array(hf['mask'])
+            acc = calculate_mask_acc(mask)
+
+            kspace_list = []
+            num_slices = kspace.shape[0]
+            for slice_idx in range(num_slices):
+                sliced_kspace = self.transform(None, kspace[slice_idx], None, None, None, None)
+                kspace_list.append(sliced_kspace)
+            kspace = torch.stack(kspace_list, dim=0)
+            mask = torch.from_numpy(mask.reshape(1, 1, kspace.shape[-2], 1).astype(np.float32)).to(torch.uint8)
+
+        return mask, kspace, image, acc, kspace_fname.name
 
 class CNNSliceData(Dataset):
     def __init__(self, root: Path):
@@ -32,18 +86,13 @@ class CNNSliceData(Dataset):
     
     def __getitem__(self, i):
         image_fname = self.image_examples[i]
-        
-        image = []
         with h5py.File(image_fname, "r") as hf:
-            num_slices = hf['image_grappa'].shape[0]
-            for slice_idx in range(num_slices):
-                image.append(hf['image_grappa'][slice_idx])
-            image = np.stack(image, axis=0)
+            image = np.array(hf['image_grappa'])
         if 'brain' in image_fname.name:
             target = 0
         elif 'knee' in image_fname.name:
             target = 1
-        return torch.tensor(image, dtype=torch.float32), torch.tensor(target, dtype=torch.long)
+        return torch.from_numpy(image.astype(np.float32)), torch.tensor(target, dtype=torch.long)
 
 class FastmriSliceData(Dataset):
     def __init__(
@@ -209,6 +258,8 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
         )
     elif slicedata == 'CNNSliceData':
         data_storage = CNNSliceData(root=data_path)
+    elif slicedata == 'TestSliceData':
+        data_storage = TestSliceData(root=data_path, transform=FastmriDataTransform(data_type=data_type))
 
     worker_init = partial(worker_init_fn, seed=args.seed)
     g = torch.Generator()

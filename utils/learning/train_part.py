@@ -169,7 +169,7 @@ def validate(model_engine, data_loader, loss_type, slicedata):
         return total_loss / len_loader, 1 - incorret / len_loader, time.perf_counter() - start
 
 
-def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_new_best, save_artifact):
+def save_model(args, epoch, model, optimizer, lr_scheduler, is_new_best, save_artifact):
     torch.save(
         {
             'args': args,
@@ -177,7 +177,6 @@ def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_ne
             'model': model.state_dict(),
             'optimizer': optimizer.state_dict(),
             'lr_scheduler': lr_scheduler.state_dict(),
-            'best_val_loss': best_val_loss,
         },
         f = args.exp_dir / f"epoch-{epoch}-model.pt"
     )
@@ -387,7 +386,7 @@ def train(args):
         is_new_best = val_loss < best_val_loss
         best_val_loss = min(best_val_loss, val_loss)
 
-        save_model(args, epoch + 1, model_engine.module, optimizer, lr_scheduler, best_val_loss, is_new_best, args.save_artifact)
+        save_model(args, epoch + 1, model_engine.module, optimizer, lr_scheduler, is_new_best, args.save_artifact)
         print(f"{'TrainLoss':<10}: {train_loss:9.4g}   {'ValLoss':<8}: {val_loss:8.4g}")
         print(f"{'TrainTime':<10}: {train_time:8.2f}s   {'ValTime':<8}: {val_time:7.2f}s")
 

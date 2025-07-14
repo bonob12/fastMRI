@@ -6,7 +6,6 @@ LICENSE file in the root directory of this source tree.
 """
 
 import torch
-
 import fastmri
 
 def rss(data: torch.Tensor, dim: int = 0) -> torch.Tensor:
