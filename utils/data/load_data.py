@@ -107,6 +107,7 @@ class FastmriSliceData(Dataset):
         input_key: str = "kspace",
         target_key: str = "image_label",
         data_type: str = 'train',
+        acceleration: int = 4,
     ):
         
         assert num_adj_slices % 2 == 1, "Number of adjacent slices must be odd in SliceDataset"
@@ -142,6 +143,9 @@ class FastmriSliceData(Dataset):
             if data_type != 'test':
                 image_files = list(Path(root / "image").iterdir())
                 for fname in sorted(image_files):
+                    if data_type == 'val':
+                        if f"acc{acceleration}" not in fname.name:
+                            continue
                     num_slices = self._get_metadata(fname)
 
                     self.image_examples += [
@@ -157,6 +161,9 @@ class FastmriSliceData(Dataset):
         if kspace_cache.get(root) is None or not use_dataset_cache:
             kspace_files = list(Path(root / "kspace").iterdir())
             for fname in sorted(kspace_files):
+                if data_type == 'val':
+                    if f"acc{acceleration}" not in fname.name:
+                        continue
                 num_slices = self._get_metadata(fname)
 
                 self.kspace_examples += [
@@ -249,12 +256,13 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
                 acceleration=args.acceleration,
                 task=args.task,
             ),
-            use_dataset_cache=(args.volume_sample_rate==1.0),
+            use_dataset_cache=(args.volume_sample_rate==1.0) and data_type=='train',
             volume_sample_rate=args.volume_sample_rate,
             num_adj_slices=args.num_adj_slices if hasattr(args, 'num_adj_slices') else 1,
             input_key=args.input_key,
             target_key=target_key_,
             data_type=data_type,
+            acceleration=args.acceleration
         )
     elif slicedata == 'CNNSliceData':
         data_storage = CNNSliceData(root=data_path)
