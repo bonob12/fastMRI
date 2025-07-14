@@ -7,19 +7,18 @@ import numpy as np
 import torch
 import torch.nn as nn
 import time
+import datetime
 import math
 from pathlib import Path
-import copy
 import deepspeed
 import wandb
 import importlib
 import cv2 
 
-from torchinfo import summary
 from tqdm import tqdm
 from collections import defaultdict
 from utils.data.load_data import create_data_loaders
-from utils.common.utils import save_reconstructions, ssim_loss
+from utils.common.utils import save_reconstructions, seed_fix
 from utils.common.loss_function import SSIMLoss
 
 def resolve_class(class_path: str):
@@ -30,8 +29,7 @@ def resolve_class(class_path: str):
     except (ImportError, AttributeError) as e:
         raise ImportError(f"Could not resolve class '{class_path}'. Error: {e}")
 
-
-def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler, loss_type, slicedata):
+def train_epoch(model_engine, epoch, data_loader, lr_scheduler, loss_type, slicedata):
     model_engine.train()
     start_epoch = time.perf_counter()
     len_loader = len(data_loader)
@@ -92,11 +90,10 @@ def train_epoch(model_engine, epoch, steps_per_epoch, data_loader, lr_scheduler,
                         "loss": loss.item(),
                         "lr": lr_scheduler.get_last_lr()[0],
                     },
-                    step = epoch * steps_per_epoch + iter
+                    step = epoch * len_loader + iter
                 )
 
     return total_loss / len_loader, time.perf_counter() - start_epoch
-
 
 def validate(model_engine, data_loader, loss_type, slicedata):
     model_engine.eval()
@@ -172,7 +169,7 @@ def validate(model_engine, data_loader, loss_type, slicedata):
         return total_loss / len_loader, 1 - incorret / len_loader, time.perf_counter() - start
 
 
-def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_new_best):
+def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_new_best, save_artifact):
     torch.save(
         {
             'args': args,
@@ -186,12 +183,10 @@ def save_model(args, epoch, model, optimizer, lr_scheduler, best_val_loss, is_ne
     )
     if is_new_best:
         shutil.copyfile(args.exp_dir / f"epoch-{epoch}-model.pt", args.exp_dir / f'best_model.pt')
-
-        # artifact = wandb.Artifact(name=f'epoch-{epoch}-best_model', type="model")
-        # artifact.add_file(str(args.exp_dir / f'epoch-{epoch}-best_model.pt'))
-        # logged_artifact = wandb.log_artifact(artifact)
-        # logged_artifact.wait()
-
+    if save_artifact:
+        artifact = wandb.Artifact(name=f'epoch-{epoch}-model', type="model")
+        artifact.add_file(str(args.exp_dir / f"epoch-{epoch}-model.pt"))
+        wandb.log_artifact(artifact)
 
 def get_optimizer_grouped_parameters(model, weight_decay):
     decay = []
@@ -211,7 +206,6 @@ def get_optimizer_grouped_parameters(model, weight_decay):
         {"params": no_decay, "weight_decay": 0.0},
     ]
 
-
 def custom_lr_scheduler(optimizer, warmup_steps, total_steps, min_lr):
     def lr_lambda(current_step):
         if current_step < warmup_steps:
@@ -222,7 +216,6 @@ def custom_lr_scheduler(optimizer, warmup_steps, total_steps, min_lr):
             return max(min_lr / optimizer.defaults['lr'], cosine_decay)
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-        
 
 def train(args):
     device = torch.device(f'cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -234,10 +227,31 @@ def train(args):
         saved_args = checkpoint['args']
         saved_args.restart_from_checkpoint = args.restart_from_checkpoint
         saved_args.continue_lr_scheduler = args.continue_lr_scheduler
+        saved_args.save_artifact = args.save_artifact
         if not args.continue_lr_scheduler:
             saved_args.lr = args.lr
             saved_args.num_epochs = args.num_epochs
+            saved_args.warmup_epochs = args.warmup_epochs
+            saved_args.gradient_accumulation_steps = args.gradient_accumulation_steps
         args = saved_args
+
+    wandb.init(
+        project=str(args.net_name),    
+        dir=f"../result/{args.net_name}",
+        config=vars(args),
+    )
+
+    seed_fix(args.seed)
+    timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
+    wandb.run.name = run_name = f"{timestamp}-{wandb.run.id}"
+
+    args.exp_dir = Path('../result') / args.net_name / 'checkpoints' / run_name
+    args.val_dir = Path('../result') / args.net_name / 'reconstructions_val' / run_name
+    args.loss_log_dir = Path('../result') / args.net_name / 'loss_log' / run_name
+
+    args.exp_dir.mkdir(parents=True, exist_ok=True)
+    args.val_dir.mkdir(parents=True, exist_ok=True)
+    args.loss_log_dir.mkdir(parents=True, exist_ok=True)
 
     ModelClass = resolve_class(args.model_name)
 
@@ -317,9 +331,6 @@ def train(args):
     train_loader = create_data_loaders(data_path=args.data_path_train, args=args, shuffle=True, data_type='train', slicedata=slicedata)
     val_loader = create_data_loaders(data_path=args.data_path_val, args=args, data_type='val', slicedata=slicedata)
 
-    sample = next(iter(train_loader))
-    kspace = sample[1]
-    mask = sample[0]
     steps_per_epoch = len(train_loader)
 
     param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-4)
@@ -328,8 +339,8 @@ def train(args):
     optimizer_steps_per_epoch = steps_per_epoch // args.gradient_accumulation_steps
     lr_scheduler = custom_lr_scheduler(
         optimizer, 
-        warmup_steps = optimizer_steps_per_epoch, 
-        total_steps = args.num_epochs * optimizer_steps_per_epoch,
+        warmup_steps=args.warmup_epochs*optimizer_steps_per_epoch, 
+        total_steps=args.num_epochs*optimizer_steps_per_epoch,
         min_lr = 0,
     )
 
@@ -340,8 +351,6 @@ def train(args):
         lr_scheduler=lr_scheduler,
         config=ds_config,
     )
-
-    # summary(model_engine.module, input_size=[tuple(kspace.shape), tuple(mask.shape)], device='cuda')
     
     if args.restart_from_checkpoint is not None:
         start_epoch = checkpoint['epoch']
@@ -365,7 +374,7 @@ def train(args):
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
         print(f'Epoch [{epoch + 1:2d}/{start_epoch + args.num_epochs:2d}] ............... {args.net_name} ...............')
         
-        train_loss, train_time = train_epoch(model_engine, epoch, steps_per_epoch, train_loader, lr_scheduler, loss_type, slicedata)
+        train_loss, train_time = train_epoch(model_engine, epoch, train_loader, lr_scheduler, loss_type, slicedata)
         
         if slicedata == 'FastmriSliceData':
             val_loss, reconstructions, targets, val_time = validate(model_engine, val_loader, loss_type, slicedata)
@@ -378,7 +387,7 @@ def train(args):
         is_new_best = val_loss < best_val_loss
         best_val_loss = min(best_val_loss, val_loss)
 
-        save_model(args, epoch + 1, model_engine.module, optimizer, lr_scheduler, best_val_loss, is_new_best)
+        save_model(args, epoch + 1, model_engine.module, optimizer, lr_scheduler, best_val_loss, is_new_best, args.save_artifact)
         print(f"{'TrainLoss':<10}: {train_loss:9.4g}   {'ValLoss':<8}: {val_loss:8.4g}")
         print(f"{'TrainTime':<10}: {train_time:8.2f}s   {'ValTime':<8}: {val_time:7.2f}s")
 

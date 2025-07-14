@@ -1,9 +1,5 @@
-import torch
 import argparse
-import shutil
-import datetime
 import os, sys
-import wandb
 from pathlib import Path
 
 if os.getcwd() + '/utils/model/' not in sys.path:
@@ -14,7 +10,6 @@ if os.getcwd() + '/utils/common/' not in sys.path:
     sys.path.insert(1, os.getcwd() + '/utils/common/')
 from utils.common.utils import seed_fix
 
-
 def str_to_bool(v):
     if isinstance(v, bool):
         return v
@@ -24,42 +19,31 @@ def str_to_bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
-    
 
 def str_to_int_list(s):
     s = s.strip().strip("'").strip('"')
     return list(map(int, s.strip().split()))
 
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--batch_size', type=int, default=1)
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
-    parser.add_argument('--num_workers', type=int, default=1)
-    parser.add_argument('--num_epochs', type=int, default=5)
-    parser.add_argument('--net_name', type=Path, default='test_varnet')
     parser.add_argument('--model_name', type=str, default='utils.model.varnet.VarNet')
-    parser.add_argument('--data_path_train', type=Path, default='../Data/train/')
-    parser.add_argument('--data_path_val', type=Path, default='../Data/val/')
-    parser.add_argument('--lr', type=float, default=1e-3)
-    parser.add_argument('--seed', type=int, default=430)
     parser.add_argument('--restart_from_checkpoint', type=Path, default=None)
-    parser.add_argument('--continue_lr_scheduler', type=str_to_bool, default=True)
-
     args, _ = parser.parse_known_args()
 
+    if args.restart_from_checkpoint is not None:
+        parser.add_argument('--continue_lr_scheduler', type=str_to_bool, default=True)
+    if not args.model_name.endswith('CNN'):
+        parser.add_argument('--task', type=str, default='brain')
+        parser.add_argument('--acceleration', type=int, default=4)
+        parser.add_argument('--input_key', type=str, default='kspace')
+        parser.add_argument('--target_key', type=str, default='image_label')
+        parser.add_argument('--max_key', type=str, default='max')
     if args.model_name.endswith('VarNet'):
         parser.add_argument('--cascade', type=int, default=1)
         parser.add_argument('--chans', type=int, default=9)
         parser.add_argument('--sens_chans', type=int, default=4)
         parser.add_argument('--pools', type=int, default=4)
         parser.add_argument('--sens_pools', type=int, default=4)
-        parser.add_argument('--input_key', type=str, default='kspace')
-        parser.add_argument('--target_key', type=str, default='image_label')
-        parser.add_argument('--max_key', type=str, default='max')
-        parser.add_argument('--volume_sample_rate', type=float, default=1.0)
-        parser.add_argument('--acceleration', type=int, default=4)
-        parser.add_argument('--task', type=str, default='brain')
     elif args.model_name.endswith('PromptMR'):
         parser.add_argument('--num_cascades', type=int, default=1)
         parser.add_argument('--num_adj_slices', type=int, default=1)
@@ -82,40 +66,17 @@ if __name__ == '__main__':
         parser.add_argument('--adaptive_input', type=str_to_bool, default=False)
         parser.add_argument('--use_sens_adj', type=str_to_bool, default=False)
         parser.add_argument('--compute_sens_per_coil', type=str_to_bool, default=False)
-        parser.add_argument('--input_key', type=str, default='kspace')
-        parser.add_argument('--target_key', type=str, default='image_label')
-        parser.add_argument('--max_key', type=str, default='max')
-        parser.add_argument('--volume_sample_rate', type=float, default=1.0)
-        parser.add_argument('--acceleration', type=int, default=4)
-        parser.add_argument('--task', type=str, default='brain')
-    elif args.model_name.endswith('CNN'):
-        pass
-    else:
-        raise ValueError(f"Unsupported model: {args.model_name}")
 
+    parser.add_argument('--net_name', type=Path, default='test_varnet')
+    parser.add_argument('--data_path_train', type=Path, default='../Data/train/')
+    parser.add_argument('--data_path_val', type=Path, default='../Data/val/')
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
+    parser.add_argument('--num_epochs', type=int, default=5)
+    parser.add_argument('--warmup_epochs', type=int, default=0)
+    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--seed', type=int, default=430)
+    parser.add_argument('--volume_sample_rate', type=float, default=1.0)
+    parser.add_argument('--save_artifact', type=str_to_bool, default=False)
     args = parser.parse_args()
-
-    wandb.init(
-        project=str(args.net_name),    
-        dir=f"../result/{args.net_name}",
-        config=vars(args),
-    )
-
-    # fix seed
-    if args.seed is not None:
-        seed_fix(args.seed)
-
-    run_id = wandb.run.id
-    timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
-    run_name = f"{timestamp}-{run_id}"
-    wandb.run.name = run_name
-
-    args.exp_dir = Path('../result') / args.net_name / 'checkpoints' / run_name
-    args.val_dir = Path('../result') / args.net_name / 'reconstructions_val' / run_name
-    args.loss_log_dir = Path('../result') / args.net_name / 'loss_log' / run_name
-
-    args.exp_dir.mkdir(parents=True, exist_ok=True)
-    args.val_dir.mkdir(parents=True, exist_ok=True)
-    args.loss_log_dir.mkdir(parents=True, exist_ok=True)
 
     train(args)

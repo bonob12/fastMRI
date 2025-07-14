@@ -8,7 +8,6 @@ pyyaml
 opencv-python
 matplotlib
 wandb
-torchinfo
 deepspeed
 torchvision
 mpi4py

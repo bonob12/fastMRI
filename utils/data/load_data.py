@@ -216,10 +216,10 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
 
     data_loader = DataLoader(
         dataset=data_storage,
-        batch_size=args.batch_size,
+        batch_size=1,
         shuffle=shuffle,
         generator=g,
-        num_workers=args.num_workers,
+        num_workers=4,
         persistent_workers=True,
         pin_memory=True,
         worker_init_fn=worker_init,
