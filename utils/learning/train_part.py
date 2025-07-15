@@ -108,7 +108,7 @@ def validate(model_engine, data_loader, loss_type, slicedata):
         with tqdm(total=len_loader, desc=f"{'Val':<6}", ncols=120) as pbar:
             for iter, data in enumerate(data_loader):
                 if slicedata == 'FastmriSliceData':
-                    mask, kspace, target, maximum, fnames, slices = data
+                    mask, kspace, target, maximum, fnames, _ = data
                     mask = mask.cuda(non_blocking=True)
                     kspace = kspace.cuda(non_blocking=True)
                     target = target.cuda(non_blocking=True)
@@ -132,9 +132,6 @@ def validate(model_engine, data_loader, loss_type, slicedata):
                         binary_mask = cv2.erode(binary_mask, kernel, iterations=14)  
                         binary_mask = (torch.from_numpy(binary_mask).to(device=output.device)).type(torch.float)
                         binary_masks.append(binary_mask)
-
-                        reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
-                        targets[fnames[i]][int(slices[i])] = target[i].cpu().numpy()
             
                     binary_masks = torch.stack(binary_masks).to(device=output.device)
                     loss = loss_type(output*binary_masks, target*binary_masks, maximum)
@@ -156,15 +153,7 @@ def validate(model_engine, data_loader, loss_type, slicedata):
                 pbar.update(1)
     
     if slicedata == 'FastmriSliceData':
-        for fname in reconstructions:
-            reconstructions[fname] = np.stack(
-                [out for _, out in sorted(reconstructions[fname].items())]
-            )
-        for fname in targets:
-            targets[fname] = np.stack(
-                [out for _, out in sorted(targets[fname].items())]
-            )
-        return total_loss / len_loader, reconstructions, targets, time.perf_counter() - start
+        return total_loss / len_loader, time.perf_counter() - start
     else:
         return total_loss / len_loader, 1 - incorret / len_loader, time.perf_counter() - start
 
@@ -332,7 +321,7 @@ def train(args):
 
     steps_per_epoch = len(train_loader)
 
-    param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-4)
+    param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-2)
     optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(param_groups, lr=args.lr)
 
     optimizer_steps_per_epoch = steps_per_epoch // args.gradient_accumulation_steps
@@ -374,7 +363,7 @@ def train(args):
         train_loss, train_time = train_epoch(model_engine, epoch, train_loader, lr_scheduler, loss_type, slicedata)
         
         if slicedata == 'FastmriSliceData':
-            val_loss, reconstructions, targets, val_time = validate(model_engine, val_loader, loss_type, slicedata)
+            val_loss, val_time = validate(model_engine, val_loader, loss_type, slicedata)
         else:
             val_loss, accuracy, val_time = validate(model_engine, val_loader, loss_type, slicedata)
 
@@ -407,11 +396,5 @@ def train(args):
 
         if is_new_best:
             print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
-            if slicedata == 'FastmriSliceData':
-                start = time.perf_counter()
-                save_reconstructions(reconstructions, args.val_dir, targets=targets, inputs=None)
-                print(
-                    f'ForwardTime = {time.perf_counter() - start:.4f}s',
-                )
 
     wandb.finish()
