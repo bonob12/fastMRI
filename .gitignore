@@ -3,6 +3,11 @@ venv_*
 env
 __pycache__
 wandb/
-*.sh
-*.yaml
-*.ipynb
+sweep_varnet.yaml
+sweep_pmr.yaml
+train_cnn.sh
+train_varnet.sh
+train_pmr.sh
+reconstruct.sh
+leaderboard_eval.sh
+tutorial.ipynb
