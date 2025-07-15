@@ -353,9 +353,7 @@ def train(args):
     
     if args.restart_from_checkpoint is not None:
         start_epoch = checkpoint['epoch']
-        best_val_loss = checkpoint['best_val_loss']
-
-        print(f"Restarted training from epoch {start_epoch + 1} with best_val_loss {best_val_loss:.4f}")
+        print(f"Restarted training from epoch {start_epoch + 1}")
         model_engine.module.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
 
@@ -367,8 +365,8 @@ def train(args):
             print("New lr_scheduler applied")
     else:
         start_epoch = 0
-        best_val_loss = float('inf')
-    
+
+    best_val_loss = float('inf')
     loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
         print(f'Epoch [{epoch + 1:2d}/{start_epoch + args.num_epochs:2d}] ............... {args.net_name} ...............')
