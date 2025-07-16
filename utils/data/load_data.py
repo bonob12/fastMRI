@@ -255,8 +255,8 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
         batch_size=1,
         shuffle=shuffle,
         generator=g,
-        num_workers=4,
-        persistent_workers=True,
+        num_workers=3,
+        persistent_workers=False,
         pin_memory=True,
         worker_init_fn=worker_init,
     )

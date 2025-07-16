@@ -1,5 +1,7 @@
 import argparse
 import os, sys
+import wandb
+import torch
 from pathlib import Path
 
 if os.getcwd() + '/utils/model/' not in sys.path:
@@ -77,4 +79,10 @@ if __name__ == '__main__':
     parser.add_argument('--save_artifact', type=str_to_bool, default=False)
     args = parser.parse_args()
 
-    train(args)
+    try:
+        train(args)
+    finally:
+        if wandb.run is not None:
+            wandb.finish()
+        if torch.distributed.is_initialized():
+            torch.distributed.destroy_process_group()
