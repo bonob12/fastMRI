@@ -106,7 +106,6 @@ class FastmriSliceData(Dataset):
         num_adj_slices: int = 1,
         input_key: str = "kspace",
         target_key: str = "image_label",
-        data_type: str = 'train',
     ):
         
         assert num_adj_slices % 2 == 1, "Number of adjacent slices must be odd in SliceDataset"
@@ -118,7 +117,6 @@ class FastmriSliceData(Dataset):
         self.transform = transform
         self.input_key = input_key
         self.target_key = target_key
-        self.data_type = data_type
 
         self.image_examples = []
         self.kspace_examples = []
@@ -139,18 +137,17 @@ class FastmriSliceData(Dataset):
             kspace_cache = {}
 
         if image_cache.get(root) is None or not use_dataset_cache:
-            if data_type != 'test':
-                image_files = list(Path(root / "image").iterdir())
-                for fname in sorted(image_files):
-                    num_slices = self._get_metadata(fname)
+            image_files = list(Path(root / "image").iterdir())
+            for fname in sorted(image_files):
+                num_slices = self._get_metadata(fname)
 
-                    self.image_examples += [
-                        (fname, slice_ind) for slice_ind in range(num_slices)
-                    ]
-                if image_cache.get(root) is None and use_dataset_cache:
-                    image_cache[root] = self.image_examples
-                    with open(self.image_cache_file, "wb") as cache_f:
-                        pickle.dump(image_cache, cache_f)
+                self.image_examples += [
+                    (fname, slice_ind) for slice_ind in range(num_slices)
+                ]
+            if image_cache.get(root) is None and use_dataset_cache:
+                image_cache[root] = self.image_examples
+                with open(self.image_cache_file, "wb") as cache_f:
+                    pickle.dump(image_cache, cache_f)
         else:
             self.image_examples = image_cache[root]
         
@@ -205,10 +202,9 @@ class FastmriSliceData(Dataset):
         return z_list
     
     def __getitem__(self, i):
-        if self.data_type != 'test':
-            image_fname, _ = self.image_examples[i]
+        image_fname, _ = self.image_examples[i]
         kspace_fname, dataslice = self.kspace_examples[i]
-        if self.data_type != 'test' and image_fname.name != kspace_fname.name:
+        if image_fname.name != kspace_fname.name:
             raise ValueError(f"Image file {image_fname.name} does not match kspace file {kspace_fname.name}")
 
         input = []
@@ -220,30 +216,20 @@ class FastmriSliceData(Dataset):
             input = np.concatenate(input, axis=0)
             mask =  np.array(hf["mask"])
             
-        if self.data_type == 'test':
-            target = None
-            attrs = None
-        else:
-            with h5py.File(image_fname, "r") as hf:
-                target = hf[self.target_key][dataslice]
-                attrs = dict(hf.attrs)
+        with h5py.File(image_fname, "r") as hf:
+            target = hf[self.target_key][dataslice]
+            attrs = dict(hf.attrs)
         
         return self.transform(mask, input, target, attrs, kspace_fname.name, dataslice)
 
 
 def create_data_loaders(data_path, args, shuffle=False, data_type='train', slicedata='FastmriSliceData'):
     if slicedata == 'FastmriSliceData':
-        if data_type != 'test':
-            max_key_ = args.max_key
-            target_key_ = args.target_key
-        else:
-            max_key_ = None
-            target_key_ = None
         data_storage = FastmriSliceData(
             root=data_path/args.task if data_type=='train' else data_path/args.task/f"acc{args.acceleration}",
             transform=FastmriDataTransform(
                 data_type=data_type,
-                max_key=max_key_,
+                max_key=args.max_key,
                 aug_start_epoch=0,
                 aug_gamma=0.1,
                 acceleration=args.acceleration,
@@ -253,8 +239,7 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
             volume_sample_rate=args.volume_sample_rate,
             num_adj_slices=args.num_adj_slices if hasattr(args, 'num_adj_slices') else 1,
             input_key=args.input_key,
-            target_key=target_key_,
-            data_type=data_type,
+            target_key=args.target_key,
         )
     elif slicedata == 'CNNSliceData':
         data_storage = CNNSliceData(root=data_path)
