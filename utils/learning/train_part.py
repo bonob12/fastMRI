@@ -97,8 +97,6 @@ def train_epoch(model_engine, epoch, data_loader, lr_scheduler, loss_type, slice
 
 def validate(model_engine, data_loader, loss_type, slicedata):
     model_engine.eval()
-    reconstructions = defaultdict(dict)
-    targets = defaultdict(dict)
     start = time.perf_counter()
     len_loader = len(data_loader)
     total_loss = 0.
@@ -290,7 +288,7 @@ def train(args):
         "train_batch_size": args.gradient_accumulation_steps,
         "train_micro_batch_size_per_gpu": 1,
         "gradient_accumulation_steps": args.gradient_accumulation_steps, 
-        "gradient_clipping": 1.0, 
+        "gradient_clipping": 0.01, 
         "fp16": {
             "enabled": False,
         },
@@ -316,7 +314,7 @@ def train(args):
 
     steps_per_epoch = len(train_loader)
 
-    param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-2)
+    param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-4)
     optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(param_groups, lr=args.lr)
 
     optimizer_steps_per_epoch = steps_per_epoch // args.gradient_accumulation_steps

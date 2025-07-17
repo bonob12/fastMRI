@@ -11,3 +11,4 @@ train_pmr.sh
 reconstruct.sh
 leaderboard_eval.sh
 tutorial.ipynb
+logdir/
