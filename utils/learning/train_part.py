@@ -353,6 +353,7 @@ def train(args):
     for epoch in range(start_epoch, start_epoch + args.num_epochs):
         print(f'Epoch [{epoch + 1:2d}/{start_epoch + args.num_epochs:2d}] ............... {args.net_name} ...............')
         
+        train_loader.dataset.update_epoch(epoch + 1)
         train_loss, train_time = train_epoch(model_engine, epoch, train_loader, lr_scheduler, loss_type, slicedata)
         
         if slicedata == 'FastmriSliceData':
