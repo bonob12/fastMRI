@@ -230,8 +230,8 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
             transform=FastmriDataTransform(
                 data_type=data_type,
                 max_key=args.max_key,
-                aug_start_epoch=args.warmup_epochs,
-                aug_gamma=0.1,
+                aug_start_epoch=args.aug_start_epoch,
+                aug_gamma=args.aug_gamma,
                 acceleration=args.acceleration,
                 task=args.task,
             ),

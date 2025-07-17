@@ -73,6 +73,8 @@ if __name__ == '__main__':
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
     parser.add_argument('--num_epochs', type=int, default=5)
     parser.add_argument('--warmup_epochs', type=int, default=0)
+    parser.add_argument('--aug_start_epoch', type=int, default=10)
+    parser.add_argument('--aug_gamma', type=float, default=0.1)
     parser.add_argument('--lr', type=float, default=1e-3)
     parser.add_argument('--seed', type=int, default=430)
     parser.add_argument('--volume_sample_rate', type=float, default=1.0)
