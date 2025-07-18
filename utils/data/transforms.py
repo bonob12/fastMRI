@@ -91,39 +91,6 @@ class Aug_RotateShiftShearScale:
         else:
             return x, False
 
-# class Aug_BiasField:
-#     def __init__(self, p_bias=0.2, strength=0.3):
-#         self.p_bias = p_bias
-#         self.strength = strength
-
-#     def __call__(self, x: torch.Tensor, p_aug: float):
-#         if torch.rand(1).item() < self.p_bias * p_aug:
-#             strength = float(torch.empty(1).uniform_(-self.strength, self.strength))
-#             bias = torch.tensor(
-#                 np.outer(
-#                     np.linspace(1 - strength, 1 + strength, x.shape[-3]),
-#                     np.linspace(1 - strength, 1 + strength, x.shape[-2])
-#                 ),
-#                 dtype=x.dtype,
-#                 device=x.device,
-#             )
-#             x = x * bias[..., None]
-#             return x, True
-#         return x, False
-
-
-# class Aug_MotionBlur:
-#     def __init__(self, p_blur=0.2, kernel_size=3):
-#         self.p_blur = p_blur
-#         self.kernel_size = kernel_size
-    
-#     def __call__(self, x: torch.Tensor, p_aug: float):
-#         if torch.rand(1).item() < self.p_blur * p_aug:
-#             real = TF.gaussian_blur(x[..., 0], kernel_size=self.kernel_size)
-#             imag = TF.gaussian_blur(x[..., 1], kernel_size=self.kernel_size)
-#             return torch.stack((real, imag), dim=-1), True
-#         return x, False
-
 class Aug_Contrast:
     def __init__(self, p_contrast, 
                  contrast_range=0.1):
@@ -243,7 +210,7 @@ class FastmriDataTransform:
                 image, auged = aug(image, p_aug)
                 if auged: is_aug = True
             if is_aug:
-                target = rss(complex_abs(image), dim=1)
+                target = rss(complex_abs(image), dim=0)
                 maximum = target.max().item()
             kspace = fft2c(image)
             mask = self.mask_func(kspace.shape)
