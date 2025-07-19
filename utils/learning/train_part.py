@@ -204,6 +204,10 @@ def custom_lr_scheduler(optimizer, warmup_steps, total_steps, min_lr):
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 def train(args):
+    device = torch.device(f'cuda:0' if torch.cuda.is_available() else 'cpu')
+    torch.cuda.set_device(0)
+    print('Current cuda device: ', torch.cuda.current_device())
+
     if args.restart_from_checkpoint is not None:
         checkpoint = torch.load(args.restart_from_checkpoint, map_location=device, weights_only=False)
         saved_args = checkpoint['args']
@@ -232,10 +236,6 @@ def train(args):
 
     args.exp_dir.mkdir(parents=True, exist_ok=True)
     args.loss_log_dir.mkdir(parents=True, exist_ok=True)
-
-    device = torch.device(f'cuda:0' if torch.cuda.is_available() else 'cpu')
-    torch.cuda.set_device(0)
-    print('Current cuda device: ', torch.cuda.current_device())
 
     ModelClass = resolve_class(args.model_name)
 

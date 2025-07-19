@@ -5,6 +5,8 @@ import numpy as np
 import pickle
 
 from utils.data.transforms import FastmriDataTransform
+from utils.data.data_augment import DataAugmentor
+
 from torch.utils.data import Dataset, DataLoader
 from pathlib import Path
 from functools import partial
@@ -230,10 +232,8 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
             transform=FastmriDataTransform(
                 data_type=data_type,
                 max_key=args.max_key,
-                aug_start_epoch=args.aug_start_epoch,
-                aug_gamma=args.aug_gamma,
                 acceleration=args.acceleration,
-                task=args.task,
+                augmentor=DataAugmentor(hparams=args)
             ),
             use_dataset_cache=(args.volume_sample_rate==1.0),
             volume_sample_rate=args.volume_sample_rate,

@@ -28,6 +28,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='utils.model.varnet.VarNet')
     parser.add_argument('--restart_from_checkpoint', type=Path, default=None)
+    parser.add_argument('--aug_on', default=False, action='store_true')
     args, _ = parser.parse_known_args()
 
     if args.restart_from_checkpoint is not None:
@@ -66,6 +67,24 @@ if __name__ == '__main__':
         parser.add_argument('--adaptive_input', type=str_to_bool, default=False)
         parser.add_argument('--use_sens_adj', type=str_to_bool, default=False)
         parser.add_argument('--compute_sens_per_coil', type=str_to_bool, default=False)
+    if args.aug_on:
+        parser.add_argument('--aug_delay', type=int, default=0)
+        parser.add_argument('--aug_strength', type=float, default=0.0)
+        parser.add_argument('--aug_exp_decay', type=float, default=5.0) 
+        parser.add_argument('--aug_weight_fliph', type=float, default=1.0)
+        parser.add_argument('--aug_weight_flipv', type=float, default=1.0) 
+        parser.add_argument('--aug_weight_rot90', type=float, default=1.0) 
+        parser.add_argument('--aug_weight_translation', type=float, default=1.0)
+        parser.add_argument('--aug_weight_rotation', type=float, default=1.0)  
+        parser.add_argument('--aug_weight_shearing', type=float, default=1.0)
+        parser.add_argument('--aug_weight_scaling', type=float, default=1.0)
+        parser.add_argument('--aug_max_translation_x', type=float, default=0.125)
+        parser.add_argument('--aug_max_translation_y', type=float, default=0.125)
+        parser.add_argument('--aug_max_rotation', type=float, default=180.)
+        parser.add_argument('--aug_max_shearing_x', type=float, default=15.0)
+        parser.add_argument('--aug_max_shearing_y', type=float, default=15.0)
+        parser.add_argument('--aug_max_scaling', type=float, default=0.25)
+
 
     parser.add_argument('--net_name', type=Path, default='test_varnet')
     parser.add_argument('--data_path_train', type=Path, default='../Data/train/')
@@ -79,6 +98,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=430)
     parser.add_argument('--volume_sample_rate', type=float, default=1.0)
     parser.add_argument('--save_artifact', type=str_to_bool, default=False)
+
     args = parser.parse_args()
 
     try:
