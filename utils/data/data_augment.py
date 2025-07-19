@@ -179,7 +179,7 @@ class DataAugmentor:
     
     def schedule_p(self):
         D = self.hparams.aug_delay
-        T = self.hparams.max_epochs
+        T = self.hparams.num_epochs
         t = self.epoch
         p_max = self.hparams.aug_strength
 
