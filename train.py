@@ -28,7 +28,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_name', type=str, default='utils.model.varnet.VarNet')
     parser.add_argument('--restart_from_checkpoint', type=Path, default=None)
-    parser.add_argument('--aug_on', default=False, action='store_true')
+    parser.add_argument('--aug_on', type=str_to_bool, default=False)
     args, _ = parser.parse_known_args()
 
     if args.restart_from_checkpoint is not None:
@@ -97,7 +97,7 @@ if __name__ == '__main__':
     parser.add_argument('--volume_sample_rate', type=float, default=1.0)
     parser.add_argument('--save_artifact', type=str_to_bool, default=False)
 
-    args = parser.parse_args()
+    args, _ = parser.parse_known_args()
 
     try:
         train(args)

@@ -156,22 +156,12 @@ def validate(model_engine, data_loader, loss_type, slicedata):
         return total_loss / len_loader, 1 - incorret / len_loader, time.perf_counter() - start
 
 
-def save_model(args, epoch, model, optimizer, lr_scheduler, is_new_best, save_artifact):
-    torch.save(
-        {
-            'args': args,
-            'epoch': epoch,
-            'model': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'lr_scheduler': lr_scheduler.state_dict(),
-        },
-        f = args.exp_dir / f"epoch-{epoch}-model.pt"
-    )
-    if is_new_best:
-        shutil.copyfile(args.exp_dir / f"epoch-{epoch}-model.pt", args.exp_dir / f'best_model.pt')
+def save_model(args, epoch, model_engine, save_artifact):
+    client_state = {'epoch': epoch}
+    model_engine.save_checkpoint(args.exp_dir, tag=f"epoch-{epoch}", client_state=client_state)
     if save_artifact:
         artifact = wandb.Artifact(name=f'epoch-{epoch}-model', type="model")
-        artifact.add_file(str(args.exp_dir / f"epoch-{epoch}-model.pt"))
+        artifact.add_dir(str(args.exp_dir / f"epoch-{epoch}"))
         wandb.log_artifact(artifact)
 
 def get_optimizer_grouped_parameters(model, weight_decay):
@@ -207,19 +197,6 @@ def train(args):
     device = torch.device(f'cuda:0' if torch.cuda.is_available() else 'cpu')
     torch.cuda.set_device(0)
     print('Current cuda device: ', torch.cuda.current_device())
-
-    if args.restart_from_checkpoint is not None:
-        checkpoint = torch.load(args.restart_from_checkpoint, map_location=device, weights_only=False)
-        saved_args = checkpoint['args']
-        saved_args.restart_from_checkpoint = args.restart_from_checkpoint
-        saved_args.continue_lr_scheduler = args.continue_lr_scheduler
-        saved_args.save_artifact = args.save_artifact
-        if not args.continue_lr_scheduler:
-            saved_args.lr = args.lr
-            saved_args.num_epochs = args.num_epochs
-            saved_args.warmup_epochs = args.warmup_epochs
-            saved_args.gradient_accumulation_steps = args.gradient_accumulation_steps
-        args = saved_args
 
     wandb.init(
         project=str(args.net_name),    
@@ -334,24 +311,19 @@ def train(args):
     )
     
     if args.restart_from_checkpoint is not None:
-        start_epoch = checkpoint['epoch']
-        print(f"Restarted training from epoch {start_epoch + 1}")
-        model_engine.module.load_state_dict(checkpoint['model'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
-
-        if args.continue_lr_scheduler:
-            args.num_epochs = args.num_epochs - start_epoch
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-            print("Previous lr_scheduler continued")
-        else:
-            print("New lr_scheduler applied")
+        _, client_state = model_engine.load_checkpoint(
+            args.restart_from_checkpoint.parent, 
+            tag=args.restart_from_checkpoint.name, 
+            load_optimizer_states=True, 
+            load_lr_scheduler_states=args.continue_lr_scheduler
+        )
+        start_epoch = client_state.get('epoch', 0)
     else:
         start_epoch = 0
 
-    best_val_loss = float('inf')
     loss_log = np.empty((0, 2))
-    for epoch in range(start_epoch, start_epoch + args.num_epochs):
-        print(f'Epoch [{epoch + 1:2d}/{start_epoch + args.num_epochs:2d}] ............... {args.net_name} ...............')
+    for epoch in range(start_epoch, args.num_epochs):
+        print(f'Epoch [{epoch + 1:2d}/{args.num_epochs:2d}] ............... {args.net_name} ...............')
         
         train_loader.dataset.update_epoch(epoch + 1)
         train_loss, train_time = train_epoch(model_engine, epoch, train_loader, lr_scheduler, loss_type, slicedata)
@@ -364,10 +336,7 @@ def train(args):
         loss_log = np.append(loss_log, np.array([[epoch, train_loss]]), axis=0)
         np.save(os.path.join(args.loss_log_dir, "loss_log"), loss_log)
 
-        is_new_best = val_loss < best_val_loss
-        best_val_loss = min(best_val_loss, val_loss)
-
-        save_model(args, epoch + 1, model_engine.module, optimizer, lr_scheduler, is_new_best, args.save_artifact)
+        save_model(args, epoch + 1, model_engine, args.save_artifact)
         print(f"{'TrainLoss':<10}: {train_loss:9.4g}   {'ValLoss':<8}: {val_loss:8.4g}")
         print(f"{'TrainTime':<10}: {train_time:8.2f}s   {'ValTime':<8}: {val_time:7.2f}s")
 
@@ -388,6 +357,6 @@ def train(args):
                 step = (epoch + 1) * steps_per_epoch - 1
             )
 
-        if is_new_best:
-            print("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+    if wandb.run is not None:
+        wandb.finish()
 
