@@ -580,28 +580,27 @@ class PromptMR(nn.Module):
             learnable_prompt=learnable_prompt,
             use_sens_adj=use_sens_adj
         )
-        shared_unet = NormPromptUnet(
-            in_chans=2 * num_adj_slices,
-            out_chans=2 * num_adj_slices,
-            n_feat0=n_feat0,
-            feature_dim=feature_dim,
-            prompt_dim=prompt_dim,
-            len_prompt=len_prompt,
-            prompt_size=prompt_size,
-            n_enc_cab=n_enc_cab,
-            n_dec_cab=n_dec_cab,
-            n_skip_cab=n_skip_cab,
-            n_bottleneck_cab=n_bottleneck_cab,
-            no_use_ca=no_use_ca,
-            learnable_prompt=learnable_prompt,
-            adaptive_input=adaptive_input,
-            n_buffer=n_buffer,
-            n_history=n_history
-        )
         # DC + denoiser in each cascade
         self.cascades = nn.ModuleList([
             PromptMRBlock(
-                shared_unet,
+                NormPromptUnet(
+                    in_chans=2 * num_adj_slices,
+                    out_chans=2 * num_adj_slices,
+                    n_feat0=n_feat0,
+                    feature_dim=feature_dim,
+                    prompt_dim=prompt_dim,
+                    len_prompt=len_prompt,
+                    prompt_size=prompt_size,
+                    n_enc_cab=n_enc_cab,
+                    n_dec_cab=n_dec_cab,
+                    n_skip_cab=n_skip_cab,
+                    n_bottleneck_cab=n_bottleneck_cab,
+                    no_use_ca=no_use_ca,
+                    learnable_prompt=learnable_prompt,
+                    adaptive_input=adaptive_input,
+                    n_buffer=n_buffer,
+                    n_history=n_history
+                ),
                 num_adj_slices=num_adj_slices
             ) for _ in range(num_cascades)
         ])
