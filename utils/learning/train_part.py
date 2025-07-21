@@ -160,7 +160,7 @@ def save_model(args, epoch, model_engine, save_artifact):
     client_state = {'epoch': epoch}
     model_engine.save_checkpoint(args.exp_dir, tag=f"epoch-{epoch}", client_state=client_state)
     if save_artifact:
-        artifact = wandb.Artifact(name=f'epoch-{epoch}-model', type="model")
+        artifact = wandb.Artifact(name=wandb.run.name, type="model")
         artifact.add_dir(str(args.exp_dir / f"epoch-{epoch}"))
         wandb.log_artifact(artifact)
 
