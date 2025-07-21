@@ -207,6 +207,7 @@ def train(args):
     seed_fix(args.seed)
     timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
     wandb.run.name = run_name = f"{timestamp}-{wandb.run.id}"
+    wandb.config.update({"run_name": run_name})
 
     args.exp_dir = Path('../result') / args.net_name / 'checkpoints' / run_name
     args.loss_log_dir = Path('../result') / args.net_name / 'loss_log' / run_name
