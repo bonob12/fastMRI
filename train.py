@@ -67,6 +67,7 @@ if __name__ == '__main__':
         parser.add_argument('--adaptive_input', type=str_to_bool, default=False)
         parser.add_argument('--use_sens_adj', type=str_to_bool, default=False)
         parser.add_argument('--compute_sens_per_coil', type=str_to_bool, default=False)
+        parser.add_argument('--share_weight', type=str_to_bool, default=False)
     if args.aug_on:
         parser.add_argument('--aug_delay', type=int, default=0)
         parser.add_argument('--aug_strength', type=float, default=0.0)

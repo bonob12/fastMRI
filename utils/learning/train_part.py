@@ -250,6 +250,7 @@ def train(args):
             adaptive_input=args.adaptive_input,
             use_sens_adj=args.use_sens_adj,
             compute_sens_per_coil=args.compute_sens_per_coil,
+            share_weight=args.share_weight,
         )
         loss_type = SSIMLoss().to(device=device)
         slicedata = 'FastmriSliceData'
