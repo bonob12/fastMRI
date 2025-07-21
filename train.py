@@ -96,6 +96,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=430)
     parser.add_argument('--volume_sample_rate', type=float, default=1.0)
     parser.add_argument('--save_artifact', type=str_to_bool, default=False)
+    parser.add_argument('--init_from_cascade', type=Path, default=None)
 
     args, _ = parser.parse_known_args()
 

@@ -302,6 +302,17 @@ def train(args):
         min_lr = 0,
     )
 
+    if args.init_from_cascade is not None:
+        state_dict = torch.load(args.init_from_cascade/"mp_rank_00_model_states.pt", map_location='cpu')
+        cascade_dict = {
+            k.replace('module.cascades.0.', ''): v
+            for k, v in state_dict['module'].items()
+            if k.startswith('module.cascades.0.')
+        }
+
+        for i in range(args.num_cascades):
+            model.cascades[i].load_state_dict(cascade_dict, strict=False)
+
     model_engine, _, _, _ = deepspeed.initialize(
         model=model,
         model_parameters=model.parameters(),
