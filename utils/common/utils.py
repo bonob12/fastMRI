@@ -5,6 +5,7 @@ LICENSE file in the root directory of this source tree.
 """
 
 from skimage.metrics import structural_similarity
+import os
 import h5py
 import numpy as np
 import torch
@@ -50,10 +51,12 @@ def seed_fix(n):
     torch.manual_seed(n)
     torch.cuda.manual_seed(n)
     torch.cuda.manual_seed_all(n)
+    torch.use_deterministic_algorithms(True)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     np.random.seed(n)
     random.seed(n)
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 
 def center_crop(data, height, width):
     """
