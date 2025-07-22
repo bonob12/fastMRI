@@ -56,7 +56,7 @@ def seed_fix(n):
     torch.backends.cudnn.benchmark = False
     np.random.seed(n)
     random.seed(n)
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
 def center_crop(data, height, width):
     """
