@@ -255,15 +255,15 @@ class PromptUnet(nn.Module):
         x = self.bottleneck(x)
 
         # 3. decoder
-        current_feat.append(x.clone())
+        # current_feat.append(x.clone())
         dec_prompt3 = self.prompt_level3(x)
         x = self.dec_level3(x, dec_prompt3, self.skip_attn3(enc3), history_feat3)
 
-        current_feat.append(x.clone())
+        # current_feat.append(x.clone())
         dec_prompt2 = self.prompt_level2(x)
         x = self.dec_level2(x, dec_prompt2, self.skip_attn2(enc2), history_feat2)
 
-        current_feat.append(x.clone())
+        # current_feat.append(x.clone())
         dec_prompt1 = self.prompt_level1(x)
         x = self.dec_level1(x, dec_prompt1, self.skip_attn1(enc1), history_feat1)
 
