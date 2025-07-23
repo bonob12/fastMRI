@@ -30,7 +30,6 @@ def resolve_class(class_path: str):
         raise ImportError(f"Could not resolve class '{class_path}'. Error: {e}")
 
 def train_epoch(model_engine, epoch, data_loader, lr_scheduler, loss_type, slicedata):
-    torch.cuda.empty_cache()
     model_engine.train()
     start_epoch = time.perf_counter()
     len_loader = len(data_loader)
