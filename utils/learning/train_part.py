@@ -97,7 +97,6 @@ def train_epoch(model_engine, epoch, data_loader, lr_scheduler, loss_type, slice
     return total_loss / len_loader, time.perf_counter() - start_epoch
 
 def validate(model_engine, data_loader, loss_type, slicedata):
-    torch.cuda.empty_cache()
     model_engine.eval()
     start = time.perf_counter()
     len_loader = len(data_loader)
@@ -159,7 +158,6 @@ def validate(model_engine, data_loader, loss_type, slicedata):
 
 
 def save_model(args, epoch, model_engine, save_artifact):
-    torch.cuda.empty_cache()
     client_state = {'epoch': epoch}
     model_engine.save_checkpoint(args.exp_dir, tag=f"epoch-{epoch}", client_state=client_state)
     if save_artifact:
