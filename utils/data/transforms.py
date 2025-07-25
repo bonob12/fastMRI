@@ -37,7 +37,8 @@ class CustomMaskFunc():
             offset = (num_cols // 2) % self.acceleration
             if self.mask_type == 'random_offset':
                 if self.rng.rand() < 0.5:
-                    offset += self.rng.randint(1, self.acceleration) % self.acceleration
+                    offset += self.rng.randint(1, self.acceleration)
+                    offset %= self.acceleration
             accel_samples = np.arange(offset, num_cols - 1, self.acceleration)
             accel_samples = np.around(accel_samples).astype(np.uint)
             mask[accel_samples] = True
