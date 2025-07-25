@@ -19,22 +19,31 @@ def to_tensor(data):
     return torch.from_numpy(data.astype(np.float32))
 
 class CustomMaskFunc():
-    def __init__(self, acceleration: int):
+    def __init__(self, acceleration: int, mask_type: str='fixed', seed: int=430):
         self.acceleration = acceleration
+        self.mask_type = mask_type
+        if mask_type != 'fixed':
+            self.rng = np.random.RandomState()
+            self.rng.seed(seed)
 
     def __call__(self, shape: Sequence[int]) -> torch.Tensor:
         num_cols = shape[-2]
         num_low_freqs = int(round(num_cols * 0.08))
-
         mask = np.zeros(num_cols, dtype=np.float32)
+
+        if self.mask_type == 'random_spaced':
+            mask = self.rng.uniform(size=num_cols) < 1 / self.acceleration
+        else:
+            offset = (num_cols // 2) % self.acceleration
+            if self.mask_type == 'random_offset':
+                if self.rng.rand() < 0.5:
+                    offset += self.rng.randint(1, self.acceleration) % self.acceleration
+            accel_samples = np.arange(offset, num_cols - 1, self.acceleration)
+            accel_samples = np.around(accel_samples).astype(np.uint)
+            mask[accel_samples] = True
+
         pad = (num_cols - num_low_freqs + 1) // 2
         mask[pad : pad + num_low_freqs] = True
-
-        offset = (num_cols // 2) // self.acceleration
-
-        accel_samples = np.arange(offset, num_cols - 1, self.acceleration)
-        accel_samples = np.around(accel_samples).astype(np.uint)
-        mask[accel_samples] = True
         mask = to_tensor(mask.reshape(1, 1, num_cols, 1))
 
         return mask
@@ -44,13 +53,13 @@ class FastmriDataTransform:
         self, 
         data_type: str = 'train',
         max_key: str = 'max',
-        acceleration: int = 4,
+        mask_func = None,
         augmentor = None,
     ):
         self.data_type = data_type
         self.max_key = max_key
         if self.data_type == 'train':
-            self.mask_func = CustomMaskFunc(acceleration)
+            self.mask_func = mask_func
             self.augmentor = augmentor
     
     def update_epoch(self, epoch):

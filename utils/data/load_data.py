@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import pickle
 
-from utils.data.transforms import FastmriDataTransform
+from utils.data.transforms import FastmriDataTransform, CustomMaskFunc
 from utils.data.data_augment import DataAugmentor
 
 from torch.utils.data import Dataset, DataLoader
@@ -232,7 +232,7 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
             transform=FastmriDataTransform(
                 data_type=data_type,
                 max_key=args.max_key,
-                acceleration=args.acceleration,
+                mask_func=CustomMaskFunc(args.acceleration, args.mask_type, args.seed),
                 augmentor=DataAugmentor(hparams=args)
             ),
             use_dataset_cache=(args.volume_sample_rate==1.0),
