@@ -65,7 +65,7 @@ class FastmriDataTransform:
     ):
         self.data_type = data_type
         if task == 'knee':
-            self.uniform_height = 408
+            self.uniform_height = 400
         else:
             self.uniform_height = 384
         self.max_key = max_key
