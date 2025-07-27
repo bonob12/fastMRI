@@ -67,7 +67,6 @@ if __name__ == '__main__':
         parser.add_argument('--adaptive_input', type=str_to_bool, default=False)
         parser.add_argument('--use_sens_adj', type=str_to_bool, default=False)
         parser.add_argument('--compute_sens_per_coil', type=str_to_bool, default=False)
-        parser.add_argument('--share_weight', type=str_to_bool, default=False)
     if args.aug_on:
         parser.add_argument('--aug_delay', type=int, default=0)
         parser.add_argument('--aug_strength', type=float, default=0.0)
@@ -86,19 +85,19 @@ if __name__ == '__main__':
         parser.add_argument('--aug_max_shearing_y', type=float, default=15.0)
         parser.add_argument('--aug_max_scaling', type=float, default=0.25)
 
-
     parser.add_argument('--net_name', type=Path, default='test_varnet')
     parser.add_argument('--data_path_train', type=Path, default='../Data/train/')
     parser.add_argument('--data_path_val', type=Path, default='../Data/val/')
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
     parser.add_argument('--num_epochs', type=int, default=5)
     parser.add_argument('--warmup_epochs', type=int, default=0)
-    parser.add_argument('--lr', type=float, default=1e-3)
+    parser.add_argument('--max_lr', type=float, default=1e-3)
+    parser.add_argument('--min_lr', type=float, default=0)
+    parser.add_argument('--mask_type', type=str, default='fixed')
+    parser.add_argument('--deterministic', type=str_to_bool, default=False)
     parser.add_argument('--seed', type=int, default=430)
     parser.add_argument('--volume_sample_rate', type=float, default=1.0)
-    parser.add_argument('--mask_type', type=str, default='fixed')
     parser.add_argument('--save_artifact', type=str_to_bool, default=False)
-    parser.add_argument('--init_from_cascade', type=Path, default=None)
 
     args, _ = parser.parse_known_args()
 

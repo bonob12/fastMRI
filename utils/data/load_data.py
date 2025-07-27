@@ -184,9 +184,6 @@ class FastmriSliceData(Dataset):
                 if image_example[0].stem in sampled_vols
             ]
 
-    def update_epoch(self, epoch):
-        self.transform.update_epoch(epoch)
-
     def _get_metadata(self, fname):
         with h5py.File(fname, "r") as hf:
             if self.input_key in hf.keys():
@@ -231,6 +228,7 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
             root=data_path/args.task if data_type=='train' else data_path/args.task/f"acc{args.acceleration}",
             transform=FastmriDataTransform(
                 data_type=data_type,
+                task=args.task,
                 max_key=args.max_key,
                 mask_func=CustomMaskFunc(args.acceleration, args.mask_type, args.seed),
                 augmentor=DataAugmentor(hparams=args)

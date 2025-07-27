@@ -7,7 +7,7 @@ import torch.nn.functional as F
 from fastmri import complex_mul, complex_conj, complex_abs, fft2c, ifft2c, rss, rss_complex
 
 from torch import nn
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 from einops import rearrange
 
 from fastmri.data import transforms
@@ -19,17 +19,11 @@ def conv(in_channels, out_channels, kernel_size, bias=False, stride=1):
 
 
 def sens_expand(x: torch.Tensor, sens_maps: torch.Tensor, num_adj_slices: int = 1) -> torch.Tensor:
-    """
-    Coil Expand with sensitivity maps.
-    """
     _, c, _, _, _ = sens_maps.shape
     return fft2c(complex_mul(x.repeat_interleave(c // num_adj_slices, dim=1), sens_maps))
 
 
 def sens_reduce(x: torch.Tensor, sens_maps: torch.Tensor, num_adj_slices: int = 1) -> torch.Tensor:
-    """
-    Coil Combine with sensitivity maps.
-    """
     b, c, h, w, _ = x.shape
     x = ifft2c(x)
     x = complex_mul(x, complex_conj(sens_maps))
@@ -85,7 +79,6 @@ class PromptBlock(nn.Module):
         self.dec_conv3x3 = nn.Conv2d(prompt_dim, prompt_dim, kernel_size=3, stride=1, padding=1, bias=False)
 
     def forward(self, x):
-
         B, C, H, W = x.shape
         emb = x.mean(dim=(-2, -1))
         prompt_weights = F.softmax(self.linear_layer(emb), dim=1)
@@ -125,12 +118,12 @@ class UpBlock(nn.Module):
                  no_use_ca=False, n_history=0):
         super().__init__()
         # momentum layer
-        self.n_history = n_history
-        if n_history > 0:
-            self.momentum = nn.Sequential(
-                nn.Conv2d(in_dim*(n_history+1), in_dim, kernel_size=1, bias=bias),
-                CAB(in_dim, kernel_size, reduction, bias=bias, act=act, no_use_ca=no_use_ca)
-            )
+        # self.n_history = n_history
+        # if n_history > 0:
+        #     self.momentum = nn.Sequential(
+        #         nn.Conv2d(in_dim*(n_history+1), in_dim, kernel_size=1, bias=bias),
+        #         CAB(in_dim, kernel_size, reduction, bias=bias, act=act, no_use_ca=no_use_ca)
+        #     )
 
         self.fuse = nn.Sequential(*[CAB(in_dim+prompt_dim, kernel_size, reduction,
                                         bias=bias, act=act, no_use_ca=no_use_ca) for _ in range(n_cab)])
@@ -142,14 +135,13 @@ class UpBlock(nn.Module):
         self.ca = CAB(out_dim, kernel_size, reduction, bias=bias, act=act, no_use_ca=no_use_ca)
 
     def forward(self, x, prompt_dec, skip, history_feat: Optional[torch.Tensor] = None):
-        # momentum layer
-        if self.n_history > 0:
-            if history_feat is None:
-                x = torch.cat([torch.tile(x, (1, self.n_history+1, 1, 1))], dim=1)
-            else:
-                x = torch.cat([x, history_feat], dim=1)
+        # if self.n_history > 0:
+        #     if history_feat is None:
+        #         x = torch.cat([torch.tile(x, (1, self.n_history+1, 1, 1))], dim=1)
+        #     else:
+        #         x = torch.cat([x, history_feat], dim=1)
 
-            x = self.momentum(x)
+        #     x = self.momentum(x)
 
         x = torch.cat([x, prompt_dec], dim=1)
         x = self.fuse(x)
@@ -172,7 +164,6 @@ class SkipBlock(nn.Module):
     def forward(self, x):
         x = self.skip_attn(x)
         return x
-
 
 class PromptUnet(nn.Module):
     def __init__(
@@ -241,7 +232,7 @@ class PromptUnet(nn.Module):
             history_feat = [None, None, None]
 
         history_feat3, history_feat2, history_feat1 = history_feat
-        current_feat = []
+        # current_feat = []
 
         # 0. featue extraction
         x = self.feat_extract(x)
@@ -267,15 +258,13 @@ class PromptUnet(nn.Module):
         dec_prompt1 = self.prompt_level1(x)
         x = self.dec_level1(x, dec_prompt1, self.skip_attn1(enc1), history_feat1)
 
-        # 4. last conv
-        if self.n_history > 0:
-            for i, history_feat_i in enumerate(history_feat):
-                if history_feat_i is None:  # for the first cascade, repeat the current feature
-                    history_feat[i] = torch.cat([torch.tile(current_feat[i], (1, self.n_history, 1, 1))], dim=1)
-                else:  # for the rest cascades: pop the oldest feature and append the current feature
-                    history_feat[i] = torch.cat([current_feat[i], history_feat[i][:, :-self.feature_dim[2-i]]], dim=1)
+        # if self.n_history > 0:
+        #     for i, history_feat_i in enumerate(history_feat):
+        #         if history_feat_i is None:
+        #             history_feat[i] = torch.cat([torch.tile(current_feat[i], (1, self.n_history, 1, 1))], dim=1)
+        #         else:
+        #             history_feat[i] = torch.cat([current_feat[i], history_feat[i][:, :-self.feature_dim[2-i]]], dim=1)
         return self.conv_last(x), history_feat
-
 
 class NormPromptUnet(nn.Module):
     def __init__(
@@ -441,7 +430,7 @@ class SensitivityModel(nn.Module):
         learnable_prompt=False,
         use_sens_adj: bool = True,
     ):
-
+        
         super().__init__()
         self.num_adj_slices = num_adj_slices
         self.use_sens_adj = use_sens_adj
@@ -478,7 +467,6 @@ class SensitivityModel(nn.Module):
         return x
 
     def divide_root_sum_of_squares(self, x: torch.Tensor) -> torch.Tensor:
-
         b, adj_coil, h, w, two = x.shape
         coil = adj_coil//self.num_adj_slices
         x = x.view(b, self.num_adj_slices, coil, h, w, two)
@@ -487,7 +475,7 @@ class SensitivityModel(nn.Module):
         return x.view(b, adj_coil, h, w, two)
 
     def compute_sens(self, model: nn.Module, images: torch.Tensor, compute_per_coil: bool) -> torch.Tensor:
-        bc = images.shape[0]  # batch_size * n_coils
+        bc = images.shape[0]
         if compute_per_coil:
             output = []
             for i in range(bc):
@@ -498,30 +486,22 @@ class SensitivityModel(nn.Module):
         return output
 
     def forward(self, masked_kspace: torch.Tensor, mask: torch.Tensor, compute_per_coil: bool = False) -> torch.Tensor:
-        # get low frequency line locations and mask them out
         squeezed_mask = mask[:, 0, 0, :, 0]
         cent = squeezed_mask.shape[1] // 2
-        # running argmin returns the first non-zero
         left = torch.argmin(squeezed_mask[:, :cent].flip(1), dim=1)
         right = torch.argmin(squeezed_mask[:, cent:], dim=1)
-        num_low_freqs = torch.max(
-            2 * torch.min(left, right), torch.ones_like(left)
-        )  # force a symmetric center unless 1
+        num_low_freqs = torch.max(2 * torch.min(left, right), torch.ones_like(left))
         pad = (mask.shape[-2] - num_low_freqs + 1) // 2
 
         x = transforms.batched_mask_center(masked_kspace, pad, pad + num_low_freqs)
-
-        # convert to image space
         x = ifft2c(x)
         x, b = self.chans_to_batch_dim(x)
 
-        # estimate sensitivities
         x = self.compute_sens(self.norm_unet, x, compute_per_coil)
         x = self.batch_chans_to_chan_dim(x, b)
         x = self.divide_root_sum_of_squares(x)
 
         return x
-
 
 class PromptMR(nn.Module):
 
@@ -555,7 +535,6 @@ class PromptMR(nn.Module):
         adaptive_input: bool = False,
         use_sens_adj: bool = True,
         compute_sens_per_coil: bool = True,
-        share_weight: bool = False,
     ):
 
         super().__init__()
@@ -582,8 +561,8 @@ class PromptMR(nn.Module):
             use_sens_adj=use_sens_adj
         )
         
-        if share_weight:
-            shared_block = PromptMRBlock(
+        self.cascades = nn.ModuleList([
+            PromptMRBlock(
                 NormPromptUnet(
                     in_chans=2 * num_adj_slices,
                     out_chans=2 * num_adj_slices,
@@ -603,32 +582,8 @@ class PromptMR(nn.Module):
                     n_history=n_history
                 ),
                 num_adj_slices=num_adj_slices
-            )
-            self.cascades = nn.ModuleList([shared_block for _ in range(num_cascades)])
-        else:
-            self.cascades = nn.ModuleList([
-                PromptMRBlock(
-                    NormPromptUnet(
-                        in_chans=2 * num_adj_slices,
-                        out_chans=2 * num_adj_slices,
-                        n_feat0=n_feat0,
-                        feature_dim=feature_dim,
-                        prompt_dim=prompt_dim,
-                        len_prompt=len_prompt,
-                        prompt_size=prompt_size,
-                        n_enc_cab=n_enc_cab,
-                        n_dec_cab=n_dec_cab,
-                        n_skip_cab=n_skip_cab,
-                        n_bottleneck_cab=n_bottleneck_cab,
-                        no_use_ca=no_use_ca,
-                        learnable_prompt=learnable_prompt,
-                        adaptive_input=adaptive_input,
-                        n_buffer=n_buffer,
-                        n_history=n_history
-                    ),
-                    num_adj_slices=num_adj_slices
-                ) for _ in range(num_cascades)
-            ])
+            ) for _ in range(num_cascades)
+        ])
 
     def forward(self, masked_kspace: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
 
@@ -641,7 +596,6 @@ class PromptMR(nn.Module):
         for cascade in self.cascades:
             img_pred, latent, history_feat = torch.utils.checkpoint.checkpoint(cascade, img_pred, img_zf, latent, mask, sens_maps, history_feat, use_reentrant=False)
 
-        # get central slice of rss as final output
         result = torch.chunk(img_pred, self.num_adj_slices, dim=1)[self.center_slice]
         result = rss(complex_abs(complex_mul(result, sens_maps)), dim=1)
         result = center_crop(result, 384, 384)

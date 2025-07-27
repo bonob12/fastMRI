@@ -47,16 +47,17 @@ def ssim_loss(gt, pred, maxval=None):
     ssim = ssim / gt.shape[0]
     return 1 - ssim
 
-def seed_fix(n):
-    torch.manual_seed(n)
-    torch.cuda.manual_seed(n)
-    torch.cuda.manual_seed_all(n)
-    torch.use_deterministic_algorithms(True)
+def seed_fix(seed, deterministic):
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    np.random.seed(n)
-    random.seed(n)
-    os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
+    np.random.seed(seed)
+    random.seed(seed)
+    if deterministic:
+        torch.use_deterministic_algorithms(True)
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
 
 def center_crop(data, height, width):
     """

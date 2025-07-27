@@ -2,7 +2,6 @@ import logging
 logging.disable(logging.WARNING)
 
 import os
-import shutil
 import numpy as np
 import torch
 import torch.nn as nn
@@ -16,9 +15,8 @@ import importlib
 import cv2 
 
 from tqdm import tqdm
-from collections import defaultdict
 from utils.data.load_data import create_data_loaders
-from utils.common.utils import save_reconstructions, seed_fix
+from utils.common.utils import seed_fix
 from utils.common.loss_function import SSIMLoss
 
 def resolve_class(class_path: str):
@@ -46,7 +44,6 @@ def train_epoch(model_engine, epoch, data_loader, lr_scheduler, loss_type, slice
                 output = model_engine(kspace, mask)
 
                 binary_masks = []
-
                 for i in range(output.shape[0]):
                     target_np = target[i].cpu().numpy()
 
@@ -77,7 +74,6 @@ def train_epoch(model_engine, epoch, data_loader, lr_scheduler, loss_type, slice
             
             model_engine.backward(loss)
             model_engine.step()
-
             total_loss += loss.item()
             pbar.update(1)
             
@@ -90,12 +86,12 @@ def train_epoch(model_engine, epoch, data_loader, lr_scheduler, loss_type, slice
                         "loss": loss.item(),
                         "lr": lr_scheduler.get_last_lr()[0],
                     },
-                    step = epoch * len_loader + iter
+                    step=epoch*len_loader+iter
                 )
 
     return total_loss / len_loader, time.perf_counter() - start_epoch
 
-def validate(model_engine, data_loader, loss_type, slicedata):
+def validate(model_engine, data_loader, loss_type, slicedata): #
     model_engine.eval()
     start = time.perf_counter()
     len_loader = len(data_loader)
@@ -114,7 +110,6 @@ def validate(model_engine, data_loader, loss_type, slicedata):
                     output = model_engine(kspace, mask)
 
                     binary_masks = []
-
                     for i in range(output.shape[0]):
                         target_np = target[i].cpu().numpy()
 
@@ -157,12 +152,16 @@ def validate(model_engine, data_loader, loss_type, slicedata):
 
 
 def save_model(args, epoch, model_engine, save_artifact):
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
     client_state = {'epoch': epoch}
     model_engine.save_checkpoint(args.exp_dir, tag=f"epoch-{epoch}", client_state=client_state)
     if save_artifact:
         artifact = wandb.Artifact(name=wandb.run.name, type="model")
         artifact.add_dir(str(args.exp_dir / f"epoch-{epoch}"))
         wandb.log_artifact(artifact)
+    torch.cuda.empty_cache()
+    torch.cuda.synchronize()
 
 def get_optimizer_grouped_parameters(model, weight_decay):
     decay = []
@@ -171,16 +170,12 @@ def get_optimizer_grouped_parameters(model, weight_decay):
     for name, param in model.named_parameters():
         if not param.requires_grad:
             continue
-
         if "bias" in name or any(norm_name in name.lower() for norm_name in ["layernorm", "batchnorm", "instancenorm"]):
             no_decay.append(param)
         else:
             decay.append(param)
 
-    return [
-        {"params": decay, "weight_decay": weight_decay},
-        {"params": no_decay, "weight_decay": 0.0},
-    ]
+    return [{"params": decay, "weight_decay": weight_decay}, {"params": no_decay, "weight_decay": 0.0}]
 
 def custom_lr_scheduler(optimizer, warmup_steps, total_steps, min_lr):
     def lr_lambda(current_step):
@@ -204,14 +199,13 @@ def train(args):
         config=vars(args),
     )
 
-    seed_fix(args.seed)
+    seed_fix(args.seed, args.deterministic)
     timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
     wandb.run.name = run_name = f"{timestamp}-{wandb.run.id}"
     wandb.config.update({"run_name": run_name})
 
     args.exp_dir = Path('../result') / args.net_name / 'checkpoints' / run_name
     args.loss_log_dir = Path('../result') / args.net_name / 'loss_log' / run_name
-
     args.exp_dir.mkdir(parents=True, exist_ok=True)
     args.loss_log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -250,7 +244,6 @@ def train(args):
             adaptive_input=args.adaptive_input,
             use_sens_adj=args.use_sens_adj,
             compute_sens_per_coil=args.compute_sens_per_coil,
-            share_weight=args.share_weight,
         )
         loss_type = SSIMLoss().to(device=device)
         slicedata = 'FastmriSliceData'
@@ -289,37 +282,16 @@ def train(args):
     }
 
     train_loader = create_data_loaders(data_path=args.data_path_train, args=args, shuffle=True, data_type='train', slicedata=slicedata)
-    val_loader = create_data_loaders(data_path=args.data_path_val, args=args, data_type='val', slicedata=slicedata)
-
-    steps_per_epoch = len(train_loader)
+    val_loader = create_data_loaders(data_path=args.data_path_val, args=args, data_type='val', slicedata=slicedata) #
 
     param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-4)
-    optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(param_groups, lr=args.lr)
-
-    optimizer_steps_per_epoch = steps_per_epoch // args.gradient_accumulation_steps
-    lr_scheduler = custom_lr_scheduler(
-        optimizer, 
-        warmup_steps=args.warmup_epochs*optimizer_steps_per_epoch, 
-        total_steps=args.num_epochs*optimizer_steps_per_epoch,
-        min_lr = 0,
-    )
-
-    if args.init_from_cascade is not None:
-        state_dict = torch.load(args.init_from_cascade/"mp_rank_00_model_states.pt", map_location='cpu')
-        cascade_dict = {
-            k.replace('module.cascades.0.', ''): v
-            for k, v in state_dict['module'].items()
-            if k.startswith('module.cascades.0.')
-        }
-
-        for i in range(args.num_cascades):
-            model.cascades[i].load_state_dict(cascade_dict, strict=False)
+    optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(param_groups, lr=args.max_lr)
 
     model_engine, _, _, _ = deepspeed.initialize(
         model=model,
         model_parameters=model.parameters(),
         optimizer=optimizer,
-        lr_scheduler=lr_scheduler,
+        lr_scheduler=None,
         config=ds_config,
     )
     
@@ -333,41 +305,54 @@ def train(args):
         start_epoch = client_state.get('epoch', 0)
     else:
         start_epoch = 0
+    
+    steps_per_epoch = len(train_loader)
+    optimizer_steps_per_epoch = steps_per_epoch // args.gradient_accumulation_steps
+    warmup_steps = args.warmup_epochs * optimizer_steps_per_epoch
+    total_steps = (args.num_epochs - start_epoch) * optimizer_steps_per_epoch
+
+    lr_scheduler = custom_lr_scheduler(
+        optimizer, 
+        warmup_steps=warmup_steps, 
+        total_steps=total_steps,
+        min_lr = args.min_lr,
+    )
+    model_engine.lr_scheduler = lr_scheduler
 
     loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch [{epoch + 1:2d}/{args.num_epochs:2d}] ............... {args.net_name} ...............')
         
-        train_loader.dataset.update_epoch(epoch + 1)
+        train_loader.dataset.transform.augmentor.epoch = epoch + 1
         train_loss, train_time = train_epoch(model_engine, epoch, train_loader, lr_scheduler, loss_type, slicedata)
         
-        if slicedata == 'FastmriSliceData':
-            val_loss, val_time = validate(model_engine, val_loader, loss_type, slicedata)
-        else:
-            val_loss, accuracy, val_time = validate(model_engine, val_loader, loss_type, slicedata)
+        if slicedata == 'FastmriSliceData': #
+            val_loss, val_time = validate(model_engine, val_loader, loss_type, slicedata) #
+        else: #
+            val_loss, accuracy, val_time = validate(model_engine, val_loader, loss_type, slicedata) #
 
         loss_log = np.append(loss_log, np.array([[epoch, train_loss]]), axis=0)
         np.save(os.path.join(args.loss_log_dir, "loss_log"), loss_log)
 
         save_model(args, epoch + 1, model_engine, args.save_artifact)
-        print(f"{'TrainLoss':<10}: {train_loss:9.4g}   {'ValLoss':<8}: {val_loss:8.4g}")
-        print(f"{'TrainTime':<10}: {train_time:8.2f}s   {'ValTime':<8}: {val_time:7.2f}s")
-
+        print(f"{'TrainLoss':<10}: {train_loss:9.4g}   {'ValLoss':<8}: {val_loss:8.4g}") #
+        print(f"{'TrainTime':<10}: {train_time:8.2f}s   {'ValTime':<8}: {val_time:7.2f}s") #
+ 
         if slicedata != 'FastmriSliceData':
             print(f"{'Accuracy':<10}: {accuracy:9.4g}")
             wandb.log({
                     "train_loss": train_loss,
-                    "val_loss": val_loss,
-                    "val_accuracy": accuracy,
+                    "val_loss": val_loss, #
+                    "val_accuracy": accuracy, #
                 },
-                step = (epoch + 1) * steps_per_epoch - 1
+                step=(epoch+1)*steps_per_epoch-1
             )
         else:
             wandb.log({
                     "train_loss": train_loss,
-                    "val_loss": val_loss,
+                    "val_loss": val_loss, #
                 },
-                step = (epoch + 1) * steps_per_epoch - 1
+                step=(epoch+1)*steps_per_epoch-1
             )
 
     if wandb.run is not None:

@@ -1,7 +1,6 @@
 import numpy as np
 import torch
-import torchvision.transforms.functional as TF
-from utils.model.fastmri import fft2c, ifft2c, rss, complex_abs
+from utils.model.fastmri import fft2c, ifft2c, rss_complex
 from typing import Sequence
 
 def to_tensor(data):
@@ -32,7 +31,13 @@ class CustomMaskFunc():
         mask = np.zeros(num_cols, dtype=np.float32)
 
         if self.mask_type == 'random_spaced':
-            mask = self.rng.uniform(size=num_cols) < 1 / self.acceleration
+            num_bins = num_cols // self.acceleration
+            for i in range(num_bins):
+                start = i * self.acceleration
+                end = min(start + self.acceleration, num_cols)
+                if  start < end:
+                    idx = self.rng.randint(start, end)
+                    mask[idx] = 1.0
         else:
             offset = (num_cols // 2) % self.acceleration
             if self.mask_type == 'random_offset':
@@ -53,11 +58,16 @@ class FastmriDataTransform:
     def __init__(
         self, 
         data_type: str = 'train',
+        task: str = 'brain',
         max_key: str = 'max',
         mask_func = None,
         augmentor = None,
     ):
         self.data_type = data_type
+        if task == 'knee':
+            self.uniform_height = 408
+        else:
+            self.uniform_height = 384
         self.max_key = max_key
         if self.data_type == 'train':
             self.mask_func = mask_func
@@ -65,6 +75,25 @@ class FastmriDataTransform:
     
     def update_epoch(self, epoch):
         self.augmentor.update_epoch(epoch)
+
+    def center_crop(self, data, height, width):
+        _, h, w, _ = data.shape
+
+        if h < height:
+            pad_h1 = (height - h) // 2
+            pad_h2 = (height - h) - pad_h1
+            data = torch.nn.functional.pad(data.permute(0, 3, 1, 2), (0, 0, pad_h1, pad_h2), mode='constant', value=0).permute(0, 2, 3, 1)
+            h = height
+
+        if w < width:
+            pad_w1 = (width - w) // 2
+            pad_w2 = (width - w) - pad_w1
+            data = torch.nn.functional.pad(data.permute(0, 3, 1, 2), (pad_w1, pad_w2, 0, 0), mode='constant', value=0).permute(0, 2, 3, 1)
+            w = width
+
+        start_h = (h - height) // 2
+        start_w = (w - width) // 2
+        return data[:, start_h:start_h + height, start_w:start_w + width, :]
     
     def __call__(self, mask, input, target, attrs, fname, slice_idx):
         if self.data_type != 'test':
@@ -73,14 +102,24 @@ class FastmriDataTransform:
 
         kspace = to_tensor(input)
         if self.data_type == 'train':
-            kspace, target, maximum = self.augmentor(kspace, target, maximum)
+            image = ifft2c(kspace)
+            image, is_aug = self.augmentor(image)
+            if is_aug:
+                target = rss_complex(self.center_crop(image, 384, 384))
+                maximum = target.max().item()
+
+            if self.uniform_height < image.shape[-3]:
+                h_from = (image.shape[-3] - self.uniform_height) // 2
+                h_to = h_from + self.uniform_height
+                image = image[..., h_from:h_to, :, :]
+            kspace = fft2c(image)
             mask = self.mask_func(kspace.shape)
             kspace = kspace * mask + 0.0
         else:
-            if 384 < kspace.shape[-3]:
+            if self.uniform_height < kspace.shape[-3]:
                 image = ifft2c(kspace)
-                h_from = (image.shape[-3] - 384) // 2
-                h_to = h_from + 384
+                h_from = (image.shape[-3] - self.uniform_height) // 2
+                h_to = h_from + self.uniform_height
                 image = image[..., h_from:h_to, :, :]
                 kspace = fft2c(image)
             if self.data_type == 'test':

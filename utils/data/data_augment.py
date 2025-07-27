@@ -2,8 +2,6 @@ import numpy as np
 from math import exp
 import torch
 import torchvision.transforms.functional as TF
-from utils.model.fastmri.data import transforms as T
-from utils.model.fastmri import fft2c, ifft2c, rss_complex
 
 class AugmentationPipeline:
     def __init__(self, hparams):
@@ -139,44 +137,6 @@ class DataAugmentor:
         if self.aug_on:
             self.augmentation_pipeline = AugmentationPipeline(hparams)
     
-    def update_epoch(self, epoch):
-        self.epoch = epoch
-
-    def _crop_if_needed(self, image):
-        w_from = h_from = 0
-        
-        if 384 < image.shape[-3]:
-            w_from = (image.shape[-3] - 384) // 2
-            w_to = w_from + 384
-        else:
-            w_to = image.shape[-3]
-        
-        if 384 < image.shape[-2]:
-            h_from = (image.shape[-2] - 384) // 2
-            h_to = h_from + 384
-        else:
-            h_to = image.shape[-2]
-
-        return image[..., w_from:w_to, h_from:h_to, :]
-
-    def _pad_if_needed(self, image):
-        pad_w = 384 - image.shape[-3]
-        pad_h = 384 - image.shape[-2]
-        
-        if pad_w > 0:
-            pad_w_left = pad_w // 2
-            pad_w_right = pad_w - pad_w_left
-        else:
-            pad_w_left = pad_w_right = 0 
-            
-        if pad_h > 0:
-            pad_h_left = pad_h // 2
-            pad_h_right = pad_h - pad_h_left
-        else:
-            pad_h_left = pad_h_right = 0 
-            
-        return torch.nn.functional.pad(image.permute(0, 3, 1, 2), (pad_h_left, pad_h_right, pad_w_left, pad_w_right), 'reflect').permute(0, 2, 3, 1)
-    
     def schedule_p(self):
         D = self.hparams.aug_delay
         T = self.hparams.num_epochs
@@ -190,23 +150,16 @@ class DataAugmentor:
             p = p_max/(1-exp(-(T-D)*c))*(1-exp(-(t-D)*c))
         return p
 
-    def __call__(self, kspace, target, maximum):
+    def __call__(self, image):
         if self.aug_on:
             p = self.schedule_p()
             self.augmentation_pipeline.set_augmentation_strength(p)
         else:
             p = 0.0
 
-        image = ifft2c(kspace)
         is_aug = False
         if self.aug_on and p > 0.0:
             image, auged = self.augmentation_pipeline.augment_image(image)
             if auged: is_aug = True
 
-        image = self._crop_if_needed(image)
-        image = self._pad_if_needed(image)
-        if is_aug:
-            target = rss_complex(image)
-            maximum = target.max().item()
-        kspace = fft2c(image)
-        return kspace, target, maximum
+        return image, is_aug
