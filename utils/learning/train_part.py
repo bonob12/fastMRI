@@ -299,6 +299,12 @@ def train(args):
             load_lr_scheduler_states=args.continue_lr_scheduler
         )
         start_epoch = client_state.get('epoch', 0)
+
+        if not args.continue_lr_scheduler:
+            optimizer.defaults['lr'] = args.max_lr
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = args.max_lr
+                param_group['initial_lr'] = args.max_lr
     else:
         start_epoch = 0
     
