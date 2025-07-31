@@ -229,6 +229,7 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
                 data_type=data_type,
                 task=args.task,
                 max_key=args.max_key,
+                num_adj_slices=args.num_adj_slices if hasattr(args, 'num_adj_slices') else 1,
                 mask_func=CustomMaskFunc(args.acceleration, args.mask_type, args.seed),
                 augmentor=DataAugmentor(hparams=args)
             ),

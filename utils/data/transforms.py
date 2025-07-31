@@ -60,11 +60,13 @@ class FastmriDataTransform:
         data_type: str = 'train',
         task: str = 'brain',
         max_key: str = 'max',
+        num_adj_slices: int = 1,
         mask_func = None,
         augmentor = None,
     ):
         self.data_type = data_type
         self.max_key = max_key
+        self.num_adj_slices = num_adj_slices
         if task == 'knee':
             self.uniform_height = 416
         else:
@@ -101,7 +103,8 @@ class FastmriDataTransform:
             image = ifft2c(kspace)
             image, is_aug = self.augmentor(image)
             if is_aug:
-                target = rss_complex(self.center_crop(image, 384, 384))
+                target = torch.chunk(image, self.num_adj_slices)[self.num_adj_slices // 2]
+                target = rss_complex(self.center_crop(target, 384, 384))
                 maximum = target.max().item()
 
             if self.uniform_height < image.shape[-3]:
