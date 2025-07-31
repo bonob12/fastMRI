@@ -33,8 +33,7 @@ def calculate_mask_acc(mask):
     return 'acc4' if abs(acc - 4) < abs(acc - 8) else 'acc8'
 
 class TestSliceData(Dataset):
-    def __init__(self, root: Path, transform: Optional[Callable] = None):
-        self.transform = transform
+    def __init__(self, root: Path):
         self.image_examples = []
         self.kspace_examples = []
 
@@ -58,31 +57,31 @@ class TestSliceData(Dataset):
             image = np.array(hf['image_grappa'])
             image = torch.from_numpy(image.astype(np.float32))
         with h5py.File(kspace_fname, "r") as hf:
-            kspace = hf['kspace']
+            kspace = np.array(hf['kspace'])
             mask = np.array(hf['mask'])
             acc = calculate_mask_acc(mask)
 
-            kspace_list = []
-            num_slices = kspace.shape[0]
-            for slice_idx in range(num_slices):
-                sliced_kspace = self.transform(None, kspace[slice_idx], None, None, None, None)
-                kspace_list.append(sliced_kspace)
-            kspace = torch.stack(kspace_list, dim=0)
+            kspace = torch.from_numpy(np.stack((kspace.real, kspace.imag), axis=-1).astype(np.float32))
             mask = torch.from_numpy(mask.reshape(1, 1, kspace.shape[-2], 1).astype(np.float32)).to(torch.uint8)
 
         return mask, kspace, image, acc, kspace_fname.name
 
 class CNNSliceData(Dataset):
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, data_type: str):
         self.image_examples = []
 
-        image_files = list(Path(root/"brain/image").iterdir())
-        for fname in sorted(image_files):
-            self.image_examples += [fname]
-        image_files = list(Path(root/"knee/image").iterdir())
-        for fname in sorted(image_files):
-            self.image_examples += [fname]
-        
+        if data_type == 'train':
+            for task in ['brain', 'knee']:
+                image_files = list(Path(root/task/"image").iterdir())
+                for fname in sorted(image_files):
+                    self.image_examples += [fname]
+        else:
+            for task in ['brain', 'knee']:
+                for acc in ['acc4', 'acc8']:
+                    image_files = list(Path(root/task/acc/"image").iterdir())
+                    for fname in sorted(image_files):
+                        self.image_examples += [fname]
+
     def __len__(self):
         return len(self.image_examples)
     
@@ -240,9 +239,9 @@ def create_data_loaders(data_path, args, shuffle=False, data_type='train', slice
             target_key=args.target_key,
         )
     elif slicedata == 'CNNSliceData':
-        data_storage = CNNSliceData(root=data_path)
+        data_storage = CNNSliceData(root=data_path, data_type=data_type)
     elif slicedata == 'TestSliceData':
-        data_storage = TestSliceData(root=data_path, transform=FastmriDataTransform(data_type=data_type))
+        data_storage = TestSliceData(root=data_path)
 
     worker_init = partial(worker_init_fn, seed=args.seed)
     g = torch.Generator()

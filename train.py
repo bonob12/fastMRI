@@ -39,6 +39,8 @@ if __name__ == '__main__':
         parser.add_argument('--input_key', type=str, default='kspace')
         parser.add_argument('--target_key', type=str, default='image_label')
         parser.add_argument('--max_key', type=str, default='max')
+        parser.add_argument('--mask_type', type=str, default='fixed')
+        parser.add_argument('--volume_sample_rate', type=float, default=1.0)
     if args.model_name.endswith('VarNet'):
         parser.add_argument('--cascade', type=int, default=1)
         parser.add_argument('--chans', type=int, default=9)
@@ -93,10 +95,8 @@ if __name__ == '__main__':
     parser.add_argument('--warmup_epochs', type=int, default=0)
     parser.add_argument('--max_lr', type=float, default=1e-3)
     parser.add_argument('--min_lr', type=float, default=0)
-    parser.add_argument('--mask_type', type=str, default='fixed')
     parser.add_argument('--deterministic', type=str_to_bool, default=False)
     parser.add_argument('--seed', type=int, default=430)
-    parser.add_argument('--volume_sample_rate', type=float, default=1.0)
     parser.add_argument('--save_artifact', type=str_to_bool, default=False)
 
     args, _ = parser.parse_known_args()

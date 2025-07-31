@@ -64,17 +64,14 @@ class FastmriDataTransform:
         augmentor = None,
     ):
         self.data_type = data_type
+        self.max_key = max_key
         if task == 'knee':
             self.uniform_height = 416
         else:
             self.uniform_height = 384
-        self.max_key = max_key
         if self.data_type == 'train':
             self.mask_func = mask_func
             self.augmentor = augmentor
-    
-    def update_epoch(self, epoch):
-        self.augmentor.update_epoch(epoch)
 
     def center_crop(self, data, height, width):
         _, h, w, _ = data.shape
@@ -96,9 +93,8 @@ class FastmriDataTransform:
         return data[:, start_h:start_h + height, start_w:start_w + width, :]
     
     def __call__(self, mask, input, target, attrs, fname, slice_idx):
-        if self.data_type != 'test':
-            target = to_tensor(target)
-            maximum = attrs[self.max_key]
+        target = to_tensor(target)
+        maximum = attrs[self.max_key]
 
         kspace = to_tensor(input)
         if self.data_type == 'train':
@@ -122,8 +118,6 @@ class FastmriDataTransform:
                 h_to = h_from + self.uniform_height
                 image = image[..., h_from:h_to, :, :]
                 kspace = fft2c(image)
-            if self.data_type == 'test':
-                return kspace
             mask = to_tensor(mask.reshape(1, 1, kspace.shape[-2], 1))
         
         mask = mask.to(torch.uint8)

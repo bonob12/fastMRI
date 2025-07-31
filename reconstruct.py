@@ -19,6 +19,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     start_time = time.time()
+
+    args.cnn_checkpoint = args.cnn_checkpoint / "mp_rank_00_model_states.pt"
+    args.brain_acc4_checkpoint = args.brain_acc4_checkpoint / "mp_rank_00_model_states.pt"
+    args.brain_acc8_checkpoint = args.brain_acc8_checkpoint / "mp_rank_00_model_states.pt"
+    args.knee_acc4_checkpoint = args.knee_acc4_checkpoint / "mp_rank_00_model_states.pt"
+    args.knee_acc8_checkpoint = args.knee_acc8_checkpoint / "mp_rank_00_model_states.pt"
     
     args.data_path = args.path_data / "acc4"
     args.forward_dir = '../result' / args.net_name / 'reconstructions_leaderboard' / "acc4"

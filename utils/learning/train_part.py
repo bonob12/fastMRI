@@ -152,7 +152,7 @@ def validate(model_engine, data_loader, loss_type, slicedata): #
 
 
 def save_model(args, epoch, model_engine, save_artifact):
-    client_state = {'epoch': epoch}
+    client_state = {'epoch': epoch, 'args': args}
     model_engine.save_checkpoint(args.exp_dir, tag=f"epoch-{epoch}", client_state=client_state)
     if save_artifact:
         artifact = wandb.Artifact(name=wandb.run.name, type="model")
@@ -319,7 +319,8 @@ def train(args):
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch [{epoch + 1:2d}/{args.num_epochs:2d}] ............... {args.net_name} ...............')
         
-        train_loader.dataset.transform.augmentor.epoch = epoch + 1
+        if hasattr(train_loader.dataset, 'transform'):
+            train_loader.dataset.transform.augmentor.epoch = epoch + 1
         train_loss, train_time = train_epoch(model_engine, epoch, train_loader, lr_scheduler, loss_type, slicedata)
         
         if slicedata == 'FastmriSliceData': #
