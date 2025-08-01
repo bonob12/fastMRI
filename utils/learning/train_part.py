@@ -174,13 +174,14 @@ def get_optimizer_grouped_parameters(model, weight_decay):
     return [{"params": decay, "weight_decay": weight_decay}, {"params": no_decay, "weight_decay": 0.0}]
 
 def custom_lr_scheduler(optimizer, warmup_steps, total_steps, min_lr):
+    initial_lr = optimizer.defaults['lr']
     def lr_lambda(current_step):
         if current_step < warmup_steps:
             return float(current_step) / float(max(1, warmup_steps))
         else:
             progress = (current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
             cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
-            return max(min_lr / optimizer.defaults['lr'], cosine_decay)
+            return min_lr / initial_lr + (1 - min_lr / initial_lr) * cosine_decay
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
