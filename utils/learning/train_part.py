@@ -284,11 +284,23 @@ def train(args):
     param_groups = get_optimizer_grouped_parameters(model, weight_decay=1e-4)
     optimizer = deepspeed.ops.adam.DeepSpeedCPUAdam(param_groups, lr=args.max_lr)
 
+    steps_per_epoch = len(train_loader)
+    optimizer_steps_per_epoch = steps_per_epoch // args.gradient_accumulation_steps
+    warmup_steps = args.warmup_epochs * optimizer_steps_per_epoch
+    total_steps = args.num_epochs * optimizer_steps_per_epoch
+
+    lr_scheduler = custom_lr_scheduler(
+        optimizer, 
+        warmup_steps=warmup_steps, 
+        total_steps=total_steps,
+        min_lr=args.min_lr,
+    )
+
     model_engine, _, _, _ = deepspeed.initialize(
         model=model,
         model_parameters=model.parameters(),
         optimizer=optimizer,
-        lr_scheduler=None,
+        lr_scheduler=lr_scheduler,
         config=ds_config,
     )
     
@@ -306,21 +318,17 @@ def train(args):
             for param_group in optimizer.param_groups:
                 param_group['lr'] = args.max_lr
                 param_group['initial_lr'] = args.max_lr
+
+            total_steps = (args.num_epochs - start_epoch) * optimizer_steps_per_epoch
+            lr_scheduler = custom_lr_scheduler(
+                optimizer,
+                warmup_steps=warmup_steps,
+                total_steps=total_steps,
+                min_lr=args.min_lr,
+            )
+            model_engine.lr_scheduler = lr_scheduler
     else:
         start_epoch = 0
-    
-    steps_per_epoch = len(train_loader)
-    optimizer_steps_per_epoch = steps_per_epoch // args.gradient_accumulation_steps
-    warmup_steps = args.warmup_epochs * optimizer_steps_per_epoch
-    total_steps = (args.num_epochs - start_epoch) * optimizer_steps_per_epoch
-
-    lr_scheduler = custom_lr_scheduler(
-        optimizer, 
-        warmup_steps=warmup_steps, 
-        total_steps=total_steps,
-        min_lr = args.min_lr,
-    )
-    model_engine.lr_scheduler = lr_scheduler
 
     loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):

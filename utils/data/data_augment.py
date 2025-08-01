@@ -143,7 +143,7 @@ class DataAugmentor:
         t = self.epoch
         p_max = self.hparams.aug_strength
 
-        if t < D:
+        if t <= D:
             return 0.0
         else:
             c = self.hparams.aug_exp_decay/(T-D)
